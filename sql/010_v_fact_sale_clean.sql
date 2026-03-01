@@ -15,7 +15,8 @@ WITH
 addr_one AS (
   SELECT DISTINCT ON (a.property_id)
     a.property_id,
-    a.street_id
+    a.street_id,
+    a.zip_code
   FROM property_address a
   ORDER BY a.property_id,
     -- Uncomment if columns exist: COALESCE((a.is_primary = true), false) DESC, a.updated_at DESC NULLS LAST,
@@ -47,6 +48,7 @@ SELECT
   (h.sold_price / NULLIF(h.living_sq_ft, 0))::numeric AS ppsf,
   sc.city_id,
   sc.city_name,
+  a.zip_code,
   g.point_4326,
   g.point_3310,
   h.year_built   -- remove if mls_history has no year_built; then drop from 020/050 or add via assessor join

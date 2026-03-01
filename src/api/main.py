@@ -2,8 +2,13 @@ from __future__ import annotations
 
 import logging
 import time
+from pathlib import Path
 
+from dotenv import load_dotenv
 from fastapi import FastAPI, Request
+
+# Load .env from project root so API works regardless of cwd.
+load_dotenv(Path(__file__).resolve().parent.parent.parent / ".env")
 
 from src.api.query_router import router as query_router
 from src.api.analytics_router import router as analytics_router
