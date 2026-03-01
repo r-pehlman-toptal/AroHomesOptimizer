@@ -17,6 +17,7 @@ SELECT
   ppsf,
   city_id,
   city_name,
+  zip_code,
   point_4326,
   point_3310,
   year_built
@@ -41,5 +42,9 @@ CREATE INDEX ix_mv_sale_la_since2020_ppsf400_sold_date
 -- Spatial: grid join and map extent queries; use 3310 to match grid cells (no transform in join).
 CREATE INDEX ix_mv_sale_la_since2020_ppsf400_point_3310
   ON analytics.mv_sale_la_since2020_ppsf400 USING GIST (point_3310);
+
+-- For zip × year lookups in v_zip_year_comp and tier fallback joins.
+CREATE INDEX ix_mv_sale_la_since2020_ppsf400_zip_year
+  ON analytics.mv_sale_la_since2020_ppsf400 (zip_code, sale_year);
 
 COMMENT ON MATERIALIZED VIEW analytics.mv_sale_la_since2020_ppsf400 IS 'LA sales from 2020-01-01, ppsf>=400. Source for city/year and grid/year MVs.';

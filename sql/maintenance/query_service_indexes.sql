@@ -7,6 +7,10 @@ CREATE INDEX IF NOT EXISTS idx_mls_history_use_sold_date
 CREATE INDEX IF NOT EXISTS idx_mls_history_property_id
     ON mls_history (property_id);
 
+-- Helps v_fact_sale_clean + mv_sale_la refresh (filter sold_date >= '2020-01-01').
+CREATE INDEX IF NOT EXISTS idx_mls_history_sold_date
+    ON mls_history (sold_date);
+
 -- property_address
 CREATE INDEX IF NOT EXISTS idx_property_address_property_id
     ON property_address (property_id);
