@@ -1,0 +1,50 @@
+# Inspection question sets by year_built band (Week 3 feature).
+# App uses parcel_gold.year_built or MLS year_built to pick the set.
+# Bands are [min_year, max_year] inclusive; first matching band wins (order matters).
+
+bands:
+  - label: "Pre-1960"
+    min_year: null   # no floor
+    max_year: 1959
+    questions:
+      - "Lead paint (pre-1978) or age-appropriate coatings?"
+      - "Knob-and-tube or original electrical?"
+      - "Galvanized or original plumbing?"
+      - "Foundation type and condition?"
+  - label: "1960–1978"
+    min_year: 1960
+    max_year: 1978
+    questions:
+      - "Lead paint disclosure and condition?"
+      - "Original HVAC and insulation?"
+      - "Aluminum wiring (if period-typical)?"
+      - "Foundation and drainage?"
+  - label: "1979–1990"
+    min_year: 1979
+    max_year: 1990
+    questions:
+      - "Insulation and vapor barrier?"
+      - "HVAC age and efficiency?"
+      - "Roof and flashing?"
+      - "Foundation and slab?"
+  - label: "1991–2010"
+    min_year: 1991
+    max_year: 2010
+    questions:
+      - "HVAC and duct condition?"
+      - "Roof remaining life?"
+      - "Windows and seals?"
+      - "Electrical panel capacity?"
+  - label: "2011+"
+    min_year: 2011
+    max_year: null   # no ceiling
+    questions:
+      - "Warranty and builder documentation?"
+      - "Major systems age and service history?"
+      - "Envelope and energy upgrades?"
+default:
+  # When year_built is unknown or outside bands
+  questions:
+    - "General structural and systems condition?"
+    - "Roof and drainage?"
+    - "Electrical and plumbing condition?"
