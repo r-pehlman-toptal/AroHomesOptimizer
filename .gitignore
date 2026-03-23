@@ -65,3 +65,4 @@ temp/
 # Optional: uncomment if you use these
 # node_modules/
 # .cursor/
+data/.*csv

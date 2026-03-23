@@ -286,6 +286,7 @@ class AttomProductMixRequest(BaseModel):
     side_setback_ft: float = Field(5.0, ge=0, le=50)
     benchmark_zip_code: Optional[str] = Field(None, description="ZIP for new-build PPSF benchmark (defaults to zip_code)")
     min_year_built_comps: int = Field(2020, ge=2000, le=2030, description="New-build comp cutoff year (default 2020)")
+    min_ppsf_comps: float = Field(400.0, ge=0, le=5000, description="Minimum PPSF for new-build comps (default 400)")
     page_size: int = Field(200, ge=1, le=500, description="Max records (1–500; Attom paginates at 200/page)")
 
 
@@ -311,6 +312,7 @@ def api_attom_product_mix(params: AttomProductMixRequest) -> dict:
         side_setback_ft=params.side_setback_ft,
         benchmark_zip_code=params.benchmark_zip_code,
         min_year_built_comps=params.min_year_built_comps,
+        min_ppsf_comps=params.min_ppsf_comps,
         page_size=params.page_size,
     )
 
@@ -328,6 +330,7 @@ class AttomValueAccretionMapRequest(BaseModel):
     rear_setback_ft: float = Field(20.0, ge=0, le=100)
     side_setback_ft: float = Field(5.0, ge=0, le=50)
     min_year_built_comps: int = Field(2020, ge=2000, le=2030)
+    min_ppsf_comps: float = Field(400.0, ge=0, le=5000, description="Minimum PPSF for new-build comps (default 400)")
     page_size: int = Field(200, ge=1, le=500)
 
 
@@ -352,6 +355,7 @@ def api_attom_value_accretion_map(params: AttomValueAccretionMapRequest) -> dict
         rear_setback_ft=params.rear_setback_ft,
         side_setback_ft=params.side_setback_ft,
         min_year_built_comps=params.min_year_built_comps,
+        min_ppsf_comps=params.min_ppsf_comps,
         page_size=params.page_size,
     )
 
