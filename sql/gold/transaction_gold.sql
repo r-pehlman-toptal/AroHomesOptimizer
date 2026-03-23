@@ -1,25 +1,24 @@
--- Canonical transaction / listing table.
--- One row per listing_id or transaction_id with standardized measures.
+-- transaction_gold: one row per MLS sale for aggregates and modeling.
+-- Source: mls_history. Joins to parcel_gold via parcel_id = property_id.
+-- Spec: one row per transaction; price, DOM, PPSF, beds/baths, living_sq_ft. Data map: docs/data-map.md.
 
 CREATE OR REPLACE VIEW transaction_gold AS
 SELECT
-    t.transaction_id,
-    t.listing_id,
-    t.parcel_id,
-    t.close_date,
-    t.list_price,
-    t.sale_price,
-    t.days_on_market,
-    t.beds,
-    t.baths,
-    t.living_sqft,
-    t.lot_sqft,
-    t.property_type,
-    t.submarket,
-    -- Derived measures
-    CASE
-        WHEN t.living_sqft > 0 THEN t.sale_price / t.living_sqft
-        ELSE NULL
-    END AS price_per_sqft
-FROM staging_transactions AS t;
+  h.id AS transaction_id,
+  h.property_id AS parcel_id,
+  h.sold_date AS close_date,
+  h.sold_price AS sale_price,
+  h.living_sq_ft,
+  h.bedrooms_total AS beds,
+  h.bathrooms_full + COALESCE(h.bathrooms_half, 0) * 0.5 AS baths,
+  h.days_on_market,
+  h.property_use_standardized AS property_type,
+  h.year_built,
+  -- Derived
+  (h.sold_price / NULLIF(h.living_sq_ft, 0))::numeric AS price_per_sqft
+FROM mls_history h
+WHERE h.sold_date IS NOT NULL
+  AND h.sold_price > 0
+  AND h.living_sq_ft > 0;
 
+COMMENT ON VIEW transaction_gold IS 'One row per MLS sale (mls_history.id). parcel_id=property_id for join to parcel_gold. price_per_sqft, days_on_market for city_year.';

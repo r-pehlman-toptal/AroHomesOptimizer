@@ -142,6 +142,7 @@ Assumes ~20 hrs/week; adjust scope if capacity differs.
 | **Serving layer:** Create `analytics` schema; `v_fact_sale_clean` (one row per sale, no fan-out, LA); `mv_sale_la_since2020_ppsf400` (filters: sold_date ≥ 2020-01-01, ppsf ≥ 400) with unique + B-tree + GiST indexes | `sql/001_create_schema.sql`, `010_v_fact_sale_clean.sql`, `020_mv_sale_la_since2020_ppsf400.sql` |
 | **Serving layer:** City×year MV (`mv_agg_city_year_metrics`) and 0.25-mile grid table + grid×year MV (`grid_cells_025`, `mv_agg_grid_year_ppsf_025`) in EPSG:3310, with indexes for concurrent refresh | `sql/030`, `040`, `041`, `050` |
 | **Serving layer:** Python script to refresh MVs in dependency order (`--concurrently`, `--refresh-grid`), plus README (assumptions, indexes, cadence, Tableau usage) | `scripts/refresh_mvs.py`, `docs/serving-layer-README.md` |
+| Investigate possible vs impossible features; schedule feasible features across Weeks 3–8 | Feature feasibility note + 7-week schedule (see report §2.4 and README weekly tables) |
 | Write Week 2 report | **Week 2 report** (e.g. `docs/week2-report.md`) |
 
 **Acceptance:** Gold views exist and return data; tests exist; spec and data-quality notes are written; **and** serving-layer SQL + script + README are in place, MVs refresh successfully, and Tableau/API can query city×year and grid×year aggregates.
@@ -159,6 +160,16 @@ Assumes ~20 hrs/week; adjust scope if capacity differs.
 | Check geometry: % parcels with valid `center_point` or `perimeter`; SRID consistency | Short geometry-coverage note |
 | Write Week 3 report | **Week 3 report** |
 
+**Features (8):**
+1. **Zoning summary ("what you can build")** – From zone + ZoningConstraintBuilder once populated.
+2. **Explainable comps ("why these comps")** – Short text: same cell/zip, same year, similar size.
+3. **Inspection questions by year built** – App logic driven by year_built from parcel/MLS.
+4. **Proximity to essentials** – Use center_point + external POI (groceries, hospitals, parks) for distance.
+5. **Setback/height/FAR summary** – Once zoning detail or feasibility is in place.
+6. **ADU feasibility check** – Stub or rule-based once LA zoning rules are in DB/code.
+7. **Nearby zoning display** – Show zone(s) for subject and nearby parcels from property_zoning + zone.
+8. **Geometry coverage note** – % parcels with valid center_point; SRID consistency (aligns with plan's Week 3 geometry check).
+
 **Acceptance:** One feasibility script runs for a subset of LA and produces a constraints table; zoning mapping is documented.
 
 ---
@@ -175,6 +186,16 @@ Assumes ~20 hrs/week; adjust scope if capacity differs.
 | Propose 3–4 “LA product archetypes” (unit mixes/size bands) to focus optimization on | Short archetype list in report or notes |
 | Write Week 4 report | **Week 4 report** |
 
+**Features (8):**
+1. **DOM trend by area** – Grid×year or zip×year median DOM from days_on_market.
+2. **Seasonality (best months to buy)** – Volume and median price by month from sold_date.
+3. **Resale liquidity proxy** – From comp_count and confidence_band ("homes here sell often" vs "thin market").
+4. **New-build supply proxy** – Use new_comp_count (year_built ≥ 2019) in grid×year.
+5. **Submarket PPSF comparison** – Compare median/avg PPSF across cities or custom submarkets.
+6. **Exploratory charts** – 2–3 distributions (e.g. PPSF by submarket, DOM by zip).
+7. **LA product archetypes** – 3–4 unit mixes/size bands for optimization (per plan).
+8. **Coverage by geography** – Document "where we have enough comps" (tier 1–5) for dashboards.
+
 **Acceptance:** Agg views exist and are queryable; one exploratory artifact and archetype list exist.
 
 ---
@@ -189,6 +210,16 @@ Assumes ~20 hrs/week; adjust scope if capacity differs.
 | Implement or extend `BaselineMarketModels` in `src/models/`: regressions for `price_per_sqft` and `days_on_market`; K-fold CV | Trained baseline models (script or notebook) |
 | Feature importance or coefficients; residual checks by submarket/typology | Model card: performance, safe-use ranges, caveats |
 | Write Week 5 report | **Week 5 report** |
+
+**Features (8):**
+1. **Baseline PPSF model** – Regression (or similar) for price_per_sqft; K-fold CV (per plan).
+2. **Baseline DOM model** – Model for days_on_market (per plan).
+3. **Recommended offer range (model-driven)** – Use baseline PPSF model output for low/base/high.
+4. **Overpay risk score (model-driven)** – Compare list price to model-based value.
+5. **Appraisal gap risk estimate** – Contract price vs comp-based or model-based value.
+6. **Feature importance / coefficients** – For PPSF and DOM models; document in model card.
+7. **"What would change this estimate?" sensitivity** – Vary geography (tier) or year; show impact.
+8. **Model card** – Performance, safe-use ranges, caveats (per plan).
 
 **Acceptance:** Baseline models train and predict; model card exists.
 
@@ -206,6 +237,16 @@ Assumes ~20 hrs/week; adjust scope if capacity differs.
 | Run optimizer on 2–3 representative LA sites; document recommended unit mix and objective | Example outputs in report or notebook |
 | Write Week 6 report | **Week 6 report** |
 
+**Features (8):**
+1. **Site-level design optimizer** – Run SimpleEnvelopeOptimizer on 2–3 example sites (per plan).
+2. **Scenario hooks** – Vary price ±X%, cost or parking; scenario table per parcel (per plan).
+3. **Max bid from monthly budget** – Calculator: user budget + rate + down payment → max price; filter by sold_price/living_sq_ft/zip.
+4. **Trade-off explorer** – Bigger house vs better location using price, sqft, zip, grid PPSF.
+5. **Dealbreaker alerts** – Flag by zone, zip (e.g. HOA, flood, school when data exists).
+6. **Unit mix recommendation per parcel** – From optimizer output (per plan).
+7. **GFA/height constraints from feasibility** – Bind ZoningConstraintBuilder output to optimizer.
+8. **Revenue/margin objective** – Optimizer objective (per plan).
+
 **Acceptance:** Optimizer runs on example sites and returns unit mix + objective; at least one scenario variant is run.
 
 ---
@@ -221,6 +262,16 @@ Assumes ~20 hrs/week; adjust scope if capacity differs.
 | Create SQL views or notebooks for: recommended unit count ranges, size bands, parking ratios by submarket | Decision-oriented outputs (tables/charts) |
 | Draft “LA Design Playbook v0”: 3–5 headline recommendations, supported by outputs | **Playbook v0** (slides or memo) |
 | Write Week 7 report | **Week 7 report** |
+
+**Features (8):**
+1. **Scenario table** – Parcel/submarket, optimal mix, objective (per plan).
+2. **Sensitivity curves** – Price ±10–20%, cost ±10–20% for key sites (per plan).
+3. **Decision-oriented outputs** – Unit count ranges, size bands, parking by submarket (per plan).
+4. **LA Design Playbook v0** – 3–5 headline recommendations (per plan).
+5. **"Should I offer?" chat** – Grounded in PPSF, comp_count, DOM, confidence.
+6. **One-page house dossier** – PDF or screen per property from parcel + transaction + fact.
+7. **Compare 2–5 houses side-by-side** – Same data; side-by-side view.
+8. **Weighted decision matrix** – For listings (price, sqft, location, grid PPSF).
 
 **Acceptance:** Scenario and sensitivity outputs exist; Playbook v0 is presentable.
 
@@ -238,6 +289,16 @@ Assumes ~20 hrs/week; adjust scope if capacity differs.
 | Stakeholder walkthrough: present insights, playbook, live demo of scenario/optimization | Walkthrough completed; feedback captured |
 | Capture Phase 2 backlog (e.g. cost model, more zoning, dashboard) | **Phase 2 backlog** (list or doc) |
 | Write Week 8 report | **Week 8 report** |
+
+**Features (8):**
+1. **Confidence + coverage documentation** – How confidence_band and tier fallback work; when to trust the estimate.
+2. **Data freshness indicators** – Document or expose "last refreshed" for MVs.
+3. **Outlier detection / excluded comp list** – Logic and list of comps excluded (e.g. by ppsf bounds).
+4. **E2E runbook** – Rebuild gold/agg, run feasibility, run optimizer (per plan).
+5. **Test suite** – Row-count/duplication for gold/agg; guardrails on model inputs (per plan).
+6. **Data dictionary** – Gold/agg/constraints, assumptions, known limitations (per plan).
+7. **Phase 2 backlog** – e.g. list_price, rent data, schools, flood (per plan).
+8. **Stakeholder walkthrough** – Present playbook + live demo (per plan).
 
 **Acceptance:** Repo is documented and runnable; Playbook and Phase 2 backlog are agreed with stakeholders.
 
@@ -261,6 +322,7 @@ You can adjust or pin versions in `requirements.txt` as needed.
 
 ### 2. Database & connections
 
+- Copy `.env.example` to `.env` and set `DB_URL` (or `DATABASE_URL`). The API, Query Service, analytics jobs, and `scripts/refresh_mvs.py` all load `.env` from the project root.
 - Configure your database connection settings via environment variables (e.g., `DB_URL`) or a small config file used by `src/db/connection.py`.  
 - The query runner will be responsible for:
   - Executing the SQL in `sql/gold` and `sql/agg`.

@@ -27,6 +27,10 @@ Production-ready **analytics** schema: one-row-per-sale fact, filtered LA fact M
 | `mv_agg_city_year_metrics` | MV | City × year: total_revenue, total_sales, avg_ppsf, median_ppsf |
 | `grid_cells_025` | Table | 0.25-mile (402.336 m) grid in 3310; `cell_id`, `geom_3310`, centroid lat/lon |
 | `mv_agg_grid_year_ppsf_025` | MV | Grid × year: comp_count, median_ppsf, avg_ppsf, new_comp_count, confidence_band |
+| `v_zip_year_comp` | View | Zip × year comp counts (for tier-4 fallback) |
+| `v_cell_year_primary_geo` | View | Per (cell_id, sale_year): mode zip and city of sales in that cell |
+| `v_grid_year_comp_tiers` | View | Comp counts at tier 1 (0.25-mi) through 5 (city): comp_025, comp_3x3, comp_5x5, comp_zip, comp_city |
+| `v_grid_year_effective_tier` | View | Effective tier (1–5) and effective_comp_count using min 20 comps; use to choose geography for inference |
 
 ---
 
@@ -61,6 +65,7 @@ psql "$DB_URL" -f sql/020_mv_sale_la_since2020_ppsf400.sql
 psql "$DB_URL" -f sql/030_mv_agg_city_year_metrics.sql
 psql "$DB_URL" -f sql/040_grid_cells_025.sql
 psql "$DB_URL" -f sql/050_mv_agg_grid_year_ppsf_025.sql
+psql "$DB_URL" -f sql/055_grid_year_tiers_fallback.sql
 ```
 
 If `property_geometry` uses `geom` instead of `center_point`, edit `010` and use `pg.geom` (and set SRID 4326 if needed). If `mls_history` has no `year_built`, remove it from the view and from the fact MV.
@@ -101,6 +106,20 @@ Same idea for the other MVs if you prefer empty-first. The provided 020/030/050 
 
 ---
 
+## Tiered comp fallback (sample size for inference)
+
+For each 0.25-mile cell × year we expose comp counts at five tiers so you can decide where you have enough sample for inferences (and whether to widen from 0.25-mile):
+
+1. **Tier 1:** 0.25-mile cell (`comp_025`).
+2. **Tier 2:** 3×3 cells (~0.75-mile) (`comp_3x3`).
+3. **Tier 3:** 5×5 cells (~1.25-mile) (`comp_5x5`).
+4. **Tier 4:** ZIP (`comp_zip`; primary ZIP = mode of sales in that cell).
+5. **Tier 5:** City (`comp_city`; primary city = mode of sales in that cell).
+
+Query **`analytics.v_grid_year_effective_tier`** for a ready-made choice: it picks the first tier with comp count ≥ 20 and sets `effective_tier`, `effective_comp_count`, and `effective_geometry_type` (`'cell_025' | 'cell_3x3' | 'cell_5x5' | 'zip' | 'city'`). Use this to drive which geography you use for PPSF or other inferences. The threshold 20 is in the view definition; change it there if you want a different minimum.
+
+---
+
 ## Tableau usage
 
 - **City × year:** `analytics.mv_agg_city_year_metrics` — dimensions `city_id`, `city_name`, `sale_year`; measures `total_revenue`, `total_sales`, `avg_ppsf`, `median_ppsf`.
@@ -120,5 +139,6 @@ Same idea for the other MVs if you prefer empty-first. The provided 020/030/050 
 | `sql/040_grid_cells_025.sql` | Grid table + populate from fact extent |
 | `sql/041_populate_grid_cells_025.sql` | Repopulate grid (used by script with `--refresh-grid`) |
 | `sql/050_mv_agg_grid_year_ppsf_025.sql` | Grid × year PPSF MV + indexes |
+| `sql/055_grid_year_tiers_fallback.sql` | Tiered comp views (0.25-mi → 3×3 → 5×5 → ZIP → city) |
 | `sql/090_refresh_concurrently.sql` | Example REFRESH CONCURRENTLY statements |
 | `scripts/refresh_mvs.py` | Python refresh in dependency order, timings, `--concurrently` / `--refresh-grid` |

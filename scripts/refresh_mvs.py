@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Refresh analytics materialized views in dependency order.
-Uses DATABASE_URL or DB_URL. Supports REFRESH CONCURRENTLY and optional grid repopulation.
+Loads .env from project root; uses DATABASE_URL or DB_URL.
 """
 from __future__ import annotations
 
@@ -10,6 +10,14 @@ import os
 import sys
 import time
 from pathlib import Path
+
+# Load .env from project root so script works regardless of cwd.
+try:
+    from dotenv import load_dotenv
+    _root = Path(__file__).resolve().parent.parent
+    load_dotenv(_root / ".env")
+except ImportError:
+    pass
 
 try:
     import psycopg2
@@ -22,7 +30,7 @@ except ImportError:
 def get_conn():
     url = os.environ.get("DATABASE_URL") or os.environ.get("DB_URL")
     if not url:
-        print("Set DATABASE_URL or DB_URL", file=sys.stderr)
+        print("Set DATABASE_URL or DB_URL in .env or environment", file=sys.stderr)
         sys.exit(1)
     # Accept postgresql+psycopg2:// or postgresql://
     if url.startswith("postgresql+psycopg2://"):

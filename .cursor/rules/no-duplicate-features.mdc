@@ -1,0 +1,16 @@
+---
+description: Avoid duplicate API endpoints or features; derive from existing responses when possible
+alwaysApply: true
+---
+
+# No Duplicate Features
+
+Before adding a **new endpoint or feature** (new SQL, new route, new response model):
+
+1. **Check existing responses** — Can the same data or behavior be derived from an existing API? (e.g. a "summary" that is just one row from a list response, or aggregate fields already on each row.)
+2. **Prefer derivation in the client** — If the UI or Tableau can compute it from an existing response (e.g. first row's `comp_count` and `confidence_band` for a confidence message), do **not** add a separate endpoint or SQL for it.
+3. **One source of truth** — One endpoint per distinct data shape. Avoid a second endpoint that returns a subset or summary of the first.
+
+**Example:** Confidence summary (comp_count + confidence_band + message) is already on every F1 comp row → no separate F5 confidence-coverage endpoint; build the message in the UI from F1.
+
+When in doubt: add the field to the existing response or derive it client-side rather than creating a new route/SQL.

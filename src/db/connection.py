@@ -1,9 +1,15 @@
 import os
+from pathlib import Path
 from typing import Optional
 
+from dotenv import load_dotenv
 from sqlalchemy import create_engine
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import sessionmaker, Session
+
+# Load .env from project root (parent of src/) so it works regardless of cwd.
+_project_root = Path(__file__).resolve().parent.parent.parent  # src/db -> src -> repo root
+load_dotenv(_project_root / ".env")
 
 
 def _get_db_url(explicit_url: Optional[str] = None) -> str:
@@ -15,7 +21,7 @@ def _get_db_url(explicit_url: Optional[str] = None) -> str:
     Raises:
         RuntimeError: if no URL is provided.
     """
-    url = explicit_url or os.getenv("DB_URL")
+    url = explicit_url or os.getenv("DB_URL") or os.getenv("DATABASE_URL")
     if not url:
         raise RuntimeError(
             "Database URL not configured. Set DB_URL env var or pass explicit_url."
