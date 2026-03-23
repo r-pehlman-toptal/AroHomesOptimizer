@@ -102,6 +102,11 @@ How This Maps to the Principal DS / Optimization Role
     - `src/etl` (data cleaning, imputation, validation).
     - `tests/` (row‑count and duplication checks).
 
+**Scope: cost and customer preferences**
+
+- **Cost:** Within the 8‑week plan, cost is used as **scenario inputs** (e.g. vary cost ±X% in optimizer and sensitivity). Real cost data (actuals, cost per sqft from operations/finance) is **out of scope** for the plan and is captured in the **Phase 2 backlog** (e.g. cost model, Netsuite/expense integration).
+- **Customer preferences:** Gathering and quantifying customer preferences in the region (e.g. surveys, preference weights) is **not in the 8‑week scope**. The plan focuses on market (PPSF, DOM), feasibility, and design optimization. Customer preference research or weights can be added in Phase 2 or a separate research track.
+
 
 8-Week Plan (Detailed)
 ----------------------
@@ -287,7 +292,7 @@ Assumes ~20 hrs/week; adjust scope if capacity differs.
 | Add or extend tests: row-count/duplication for gold/agg; guardrails on model inputs | Test suite documented and runnable |
 | Expand README: data dictionary for gold/agg/constraints, assumptions, known limitations | Updated README and optional data dictionary |
 | Stakeholder walkthrough: present insights, playbook, live demo of scenario/optimization | Walkthrough completed; feedback captured |
-| Capture Phase 2 backlog (e.g. cost model, more zoning, dashboard) | **Phase 2 backlog** (list or doc) |
+| Capture Phase 2 backlog (e.g. cost model, real cost data, customer preference research, more zoning, dashboard) | **Phase 2 backlog** (list or doc) |
 | Write Week 8 report | **Week 8 report** |
 
 **Features (8):**
@@ -297,7 +302,7 @@ Assumes ~20 hrs/week; adjust scope if capacity differs.
 4. **E2E runbook** – Rebuild gold/agg, run feasibility, run optimizer (per plan).
 5. **Test suite** – Row-count/duplication for gold/agg; guardrails on model inputs (per plan).
 6. **Data dictionary** – Gold/agg/constraints, assumptions, known limitations (per plan).
-7. **Phase 2 backlog** – e.g. list_price, rent data, schools, flood (per plan).
+7. **Phase 2 backlog** – e.g. cost model / real cost data, customer preference research, list_price, rent data, schools, flood (per plan).
 8. **Stakeholder walkthrough** – Present playbook + live demo (per plan).
 
 **Acceptance:** Repo is documented and runnable; Playbook and Phase 2 backlog are agreed with stakeholders.
@@ -399,7 +404,7 @@ The analytics job layer in `src/analytics/` computes and persists:
 
 - **Regression runs** (`analytics_regression_runs`) with coefficients and sample metadata.  
 - **Home-size scenarios** (`analytics_home_size_scenarios`) for size ranges (e.g. 2000–3000 sqft).  
-- **Lot heatmaps** (`analytics_lot_heatmap`) for lot width/depth or lot-size buckets.  
+- **Lot heatmaps** (`analytics_lot_heatmap`) for lot width/depth or lot-size buckets. See [docs/footprint-and-lot-data.md](docs/footprint-and-lot-data.md) for parcel footprint, lot-size buckets, and lot heatmap APIs and data sources.  
 - **Value maps** (`analytics_value_maps`) for estimated value and value per sqft by geo unit.
 
 Typical workflow:
