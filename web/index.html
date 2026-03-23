@@ -32,6 +32,13 @@
     .chart-wrap { position: relative; height: 280px; margin-top: 0.5rem; }
     #map { height: 400px; border-radius: 8px; }
     .loading { color: var(--muted); }
+    .rebuild-eval-section { margin-top: 1rem; padding: 0.75rem; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; }
+    .rebuild-eval-section h4 { font-size: 0.95rem; margin: 0 0 0.5rem; color: var(--accent); }
+    .rebuild-eval-section table { font-size: 0.85rem; margin-top: 0.25rem; }
+    .rebuild-eval-badge { display: inline-block; padding: 0.2rem 0.5rem; border-radius: 4px; font-weight: 600; font-size: 0.85rem; }
+    .rebuild-eval-badge.valid { background: #238636; color: #fff; }
+    .rebuild-eval-badge.invalid { background: #da3633; color: #fff; }
+    .rebuild-eval-price { font-weight: 600; color: var(--accent); }
   </style>
 </head>
 <body>
@@ -51,25 +58,139 @@
         <option value="SAN FERNANDO">San Fernando</option>
       </select>
     </label>
+    <label><strong>Address or location</strong>
+      <input type="text" id="address-or-location" placeholder="Property ID or ZIP, e.g. 12345 or 90012" style="min-width: 260px;" />
+    </label>
+    <button type="button" class="primary" id="btn-show-region">Show features in this region</button>
   </div>
-  <nav>
-    <button type="button" data-panel="comps" class="active">1. F1 Comps</button>
-    <button type="button" data-panel="zip-year">2. ZIP × Year</button>
-    <button type="button" data-panel="city-year">3. City × Year</button>
-    <button type="button" data-panel="zip-month">4. ZIP × Month</button>
-    <button type="button" data-panel="map">5. PPSF Map</button>
+  <nav id="main-nav" style="margin-bottom: 0.25rem;">
+    <button type="button" data-main="aro" class="active">Aro homes (my data)</button>
+    <button type="button" data-main="attom">Attom</button>
+  </nav>
+  <nav id="sub-nav">
+    <button type="button" data-panel="region" data-source="aro">By address</button>
+    <button type="button" data-panel="comps-market" data-source="aro" class="active">Comps &amp; market</button>
+    <button type="button" data-panel="rebuild" data-source="aro">Rebuild</button>
+    <button type="button" data-panel="property-details" data-source="attom">Property details</button>
+    <button type="button" data-panel="rebuild-eval-attom" data-source="attom">Rebuild eval</button>
+    <button type="button" data-panel="site-search-attom" data-source="attom">Site search</button>
   </nav>
 
-  <div id="panel-comps" class="panel active">
+  <div id="panel-region" class="panel" data-source="aro">
+    <div class="card" id="region-intro-card">
+      <h2>Features in this region</h2>
+      <p class="summary" id="region-intro-text">Enter a <strong>Property ID</strong> or <strong>ZIP code</strong> in the bar above (e.g. <code>12345</code> or <code>90012</code>), then click <strong>Show features in this region</strong>. You’ll see feasibility, comps, where to build, and benchmark for that location.</p>
+      <div id="region-summary" class="summary" style="font-weight: 600; color: var(--accent); margin-top: 0.5rem; display: none;"></div>
+    </div>
+    <div id="region-features-wrap" style="display: none;">
+      <div class="card" id="region-card-recommend">
+        <h3 style="font-size: 1rem; margin: 0 0 0.5rem;">Build size recommendation</h3>
+        <p class="summary" style="margin-bottom: 0.5rem;">How big a home to build in this region. Recommendation plus a feature set to help you decide.</p>
+        <div class="form-row">
+          <button type="button" class="primary" id="btn-region-recommend">Get recommendation</button>
+        </div>
+        <div id="region-recommend-error" class="error"></div>
+        <div id="region-recommend-result" class="summary" style="font-weight: 600; color: var(--accent);"></div>
+        <div id="region-recommend-features" class="summary" style="margin-top: 0.75rem; font-size: 0.85rem;"></div>
+      </div>
+      <div class="card" id="region-card-feasibility">
+        <h3 style="font-size: 1rem; margin: 0 0 0.5rem;">Rebuild – Address (feasibility)</h3>
+        <p class="summary" style="margin-bottom: 0.5rem;">Check if this parcel is feasible for a target size. Only shown when you entered a Property ID.</p>
+        <div class="form-row">
+          <label>Target size (sq ft) <input type="number" id="region-target-sqft" value="2700" min="1" /></label>
+          <label>Product <select id="region-product-type"><option value="SINGLE FAMILY RESIDENCE">SFR</option><option value="DUPLEX">Duplex</option></select></label>
+          <button type="button" class="primary" id="btn-region-feasibility">Check feasibility</button>
+        </div>
+        <div id="region-feasibility-error" class="error"></div>
+        <div id="region-feasibility-result" class="summary"></div>
+      </div>
+      <div class="card">
+        <h3 style="font-size: 1rem; margin: 0 0 0.5rem;">Comps by ZIP</h3>
+        <div class="form-row">
+          <label>Year <input type="number" id="region-comps-year" value="2024" min="2020" /></label>
+          <button type="button" class="primary" id="btn-region-comps">Get comps</button>
+        </div>
+        <div id="region-comps-error" class="error"></div>
+        <div id="region-comps-result" class="summary"></div>
+      </div>
+      <div class="card">
+        <h3 style="font-size: 1rem; margin: 0 0 0.5rem;">Where to build (area ranking)</h3>
+        <div class="form-row">
+          <label>Target size (sq ft) <input type="number" id="region-where-sqft" value="2700" min="1" /></label>
+          <label>Geography <select id="region-where-geo"><option value="zip">ZIP</option><option value="city">City</option></select></label>
+          <button type="button" class="primary" id="btn-region-where">Load ranking</button>
+        </div>
+        <div id="region-where-error" class="error"></div>
+        <div id="region-where-result" class="summary"></div>
+        <div id="region-where-table-wrap"></div>
+      </div>
+      <div class="card">
+        <h3 style="font-size: 1rem; margin: 0 0 0.5rem;">New-build benchmark</h3>
+        <div class="form-row">
+          <label>Year <input type="number" id="region-benchmark-year" value="2024" min="2020" /></label>
+          <button type="button" class="primary" id="btn-region-benchmark">Load benchmark</button>
+        </div>
+        <div id="region-benchmark-error" class="error"></div>
+        <div id="region-benchmark-result" class="summary"></div>
+      </div>
+      <div class="card">
+        <h3 style="font-size: 1rem; margin: 0 0 0.5rem;">Home size heat map (by year built)</h3>
+        <p class="summary" style="margin-bottom: 0.5rem;">Count of <strong>parcels</strong> by living sq ft (home size) in this region, filtered by year built. Same as lot size: one row per parcel.</p>
+        <div class="form-row">
+          <label>Bucket size (sq ft) <input type="number" id="region-homesize-bucket" value="500" min="100" step="250" style="width: 5rem;" /></label>
+          <label>Year built from <input type="number" id="region-homesize-year-from" value="2010" min="1900" style="width: 5rem;" /></label>
+          <label>Year built to <input type="number" id="region-homesize-year-to" value="2024" min="1900" style="width: 5rem;" /></label>
+          <button type="button" class="primary" id="btn-region-homesize-heatmap">Load heat map</button>
+        </div>
+        <div id="region-homesize-heatmap-error" class="error"></div>
+        <div id="region-homesize-heatmap-result" class="summary"></div>
+        <div class="chart-wrap" style="height: 260px; margin-top: 0.5rem;"><canvas id="chart-region-homesize"></canvas></div>
+        <div id="region-homesize-heatmap-wrap" style="overflow-x: auto; margin-top: 0.5rem;"></div>
+      </div>
+      <div class="card">
+        <h3 style="font-size: 1rem; margin: 0 0 0.5rem;">Lot size heat map</h3>
+        <p class="summary" style="margin-bottom: 0.5rem;">Count of <strong>parcels</strong> (not sales) by lot size in this region. Filter by year built. Different from home size: one row per parcel with geometry.</p>
+        <div class="form-row">
+          <label>Bucket size (sq ft) <input type="number" id="region-lotsize-bucket" value="5000" min="500" step="500" style="width: 5rem;" /></label>
+          <label>Year built from <input type="number" id="region-lotsize-year-from" value="2010" min="1900" style="width: 5rem;" /></label>
+          <label>Year built to <input type="number" id="region-lotsize-year-to" value="2024" min="1900" style="width: 5rem;" /></label>
+          <button type="button" class="primary" id="btn-region-lotsize-heatmap">Load heat map</button>
+        </div>
+        <div id="region-lotsize-heatmap-error" class="error"></div>
+        <div id="region-lotsize-heatmap-result" class="summary"></div>
+        <div class="chart-wrap" style="height: 260px; margin-top: 0.5rem;"><canvas id="chart-region-lotsize"></canvas></div>
+        <div id="region-lotsize-heatmap-wrap" style="overflow-x: auto; margin-top: 0.5rem;"></div>
+      </div>
+      <div class="card">
+        <h3 style="font-size: 1rem; margin: 0 0 0.5rem;">Home size × Lot size heat map</h3>
+        <p class="summary" style="margin-bottom: 0.5rem;">Count of <strong>parcels</strong> by home size (columns) and lot size (rows). Same logic as the two heat maps above: one row per parcel. Filter by year built.</p>
+        <div class="form-row">
+          <label>Home bucket (sq ft) <input type="number" id="region-homelot-home-bucket" value="500" min="100" step="250" style="width: 5rem;" /></label>
+          <label>Lot bucket (sq ft) <input type="number" id="region-homelot-lot-bucket" value="5000" min="500" step="500" style="width: 5rem;" /></label>
+          <label>Year built from <input type="number" id="region-homelot-year-from" value="2010" min="1900" style="width: 5rem;" /></label>
+          <label>Year built to <input type="number" id="region-homelot-year-to" value="2024" min="1900" style="width: 5rem;" /></label>
+          <button type="button" class="primary" id="btn-region-homelot-heatmap">Load heat map</button>
+        </div>
+        <div id="region-homelot-heatmap-error" class="error"></div>
+        <div id="region-homelot-heatmap-result" class="summary"></div>
+        <div id="region-homelot-heatmap-wrap" style="overflow-x: auto; margin-top: 0.5rem;"></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="panel-comps-market" class="panel active" data-source="aro">
     <div class="card">
       <h2>Property – Comps &amp; confidence</h2>
-      <p class="summary">Enter property ID, load MLS info (fills living sq ft), then get comps &amp; confidence.</p>
+      <p class="summary">Enter property ID, load property (MLS + footprint + zoning), then get comps &amp; confidence.</p>
       <div class="form-row">
         <label>Property ID <input type="number" id="property-id" placeholder="e.g. 12345" min="1" /></label>
         <button type="button" class="primary" id="btn-load-property">Load property</button>
       </div>
       <div id="property-info" class="summary" style="margin-top: 0.5rem;"></div>
       <div id="property-footprint" class="summary" style="margin-top: 0.25rem;"></div>
+      <div id="property-zoning" class="summary" style="margin-top: 0.25rem; color: var(--accent);"></div>
+      <div id="property-nearby-zoning" class="summary" style="margin-top: 0.25rem;"></div>
+      <div class="chart-wrap" id="nearby-zoning-chart-wrap" style="height: 180px; margin-top: 0.25rem; display: none;"><canvas id="chart-nearby-zoning"></canvas></div>
       <div class="form-row" style="margin-top: 0.75rem;">
         <label>Living sq ft <input type="number" id="property-sqft" placeholder="from MLS or enter" min="1" step="1" /></label>
         <button type="button" class="primary" id="btn-property-comps">Get comps &amp; confidence</button>
@@ -82,10 +203,11 @@
       <div id="property-expected-ppsf" class="summary" style="font-weight: 600;"></div>
       <div id="property-speed-to-sell" class="summary"></div>
       <div id="property-subject-lot" class="summary" style="font-size: 0.9rem; color: var(--muted);"></div>
+      <p class="summary" style="font-size: 0.8rem; margin-top: 0.25rem;"><strong>Histogram colors:</strong> Bars = comp count by PPSF bucket. Vertical lines: yellow = p25, purple = median (p50, expected), green = p75.</p>
       <div class="chart-wrap" style="margin-top: 0.5rem;"><canvas id="chart-property-ppsf-histogram"></canvas></div>
     </div>
     <div class="card">
-      <h2>F1 Comps – Table &amp; histogram</h2>
+      <h2>Comps by ZIP – Table &amp; histogram</h2>
       <div class="form-row">
         <label>ZIP <input type="text" id="comps-zip" value="90012" placeholder="90012" /></label>
         <label>Year <input type="number" id="comps-year" value="2024" min="2020" /></label>
@@ -96,15 +218,13 @@
       <div id="comps-summary" class="summary"></div>
       <div id="comps-confidence" class="summary" style="font-weight: 600; color: var(--accent);"></div>
       <div class="form-row" style="margin-top: 0.5rem;">
-        <button type="button" id="btn-lot-buckets">Lot footprint distribution (this ZIP)</button>
+        <label>Bucket size (ft) <input type="number" id="lot-bucket-size" value="5" min="1" max="50" /></label>
+        <button type="button" class="primary" id="btn-lot-buckets">Lot footprint distribution (this ZIP)</button>
       </div>
       <div id="comps-lot-buckets" class="summary" style="font-size: 0.85rem;"></div>
       <div id="comps-table-wrap"></div>
       <div class="chart-wrap"><canvas id="chart-comps-histogram"></canvas></div>
     </div>
-  </div>
-
-  <div id="panel-zip-year" class="panel">
     <div class="card">
       <h2>ZIP × Year – Bar (median PPSF by ZIP)</h2>
       <div class="form-row">
@@ -123,9 +243,6 @@
       <div id="zip-trend-error" class="error"></div>
       <div class="chart-wrap"><canvas id="chart-zip-trend"></canvas></div>
     </div>
-  </div>
-
-  <div id="panel-city-year" class="panel">
     <div class="card">
       <h2>City × Year – Median PPSF over time</h2>
       <button type="button" class="primary" id="btn-city-year">Load</button>
@@ -136,9 +253,6 @@
       <h2>Sales volume over time</h2>
       <div class="chart-wrap"><canvas id="chart-city-volume"></canvas></div>
     </div>
-  </div>
-
-  <div id="panel-zip-month" class="panel">
     <div class="card">
       <h2>ZIP × Month – Seasonality</h2>
       <div class="form-row">
@@ -148,17 +262,433 @@
       <div id="zip-month-error" class="error"></div>
       <div class="chart-wrap"><canvas id="chart-zip-month"></canvas></div>
     </div>
-  </div>
-
-  <div id="panel-map" class="panel">
     <div class="card">
       <h2>PPSF Map (0.25‑mi grid)</h2>
+      <p class="summary"><strong>Color:</strong> Blue = lower PPSF, green = middle (around median), red = higher PPSF. Continuous scale relative to loaded data (min–max for the selected year).</p>
       <div class="form-row">
         <label>Year <input type="number" id="map-year" value="2024" min="2020" /></label>
         <button type="button" class="primary" id="btn-map">Load map</button>
       </div>
       <div id="map-error" class="error"></div>
       <div id="map"></div>
+    </div>
+    <div class="card">
+      <h2>Submarket PPSF comparison</h2>
+      <p class="summary">Median PPSF and sales volume by city (submarket) for a chosen year. Loads city×year data for all LA cities.</p>
+      <div class="form-row">
+        <label>Year <input type="number" id="submarkets-year" value="2024" min="2020" /></label>
+        <button type="button" class="primary" id="btn-submarkets">Load submarkets</button>
+      </div>
+      <div id="submarkets-error" class="error"></div>
+      <div id="submarkets-summary" class="summary"></div>
+      <div id="submarkets-table-wrap"></div>
+      <div class="chart-wrap"><canvas id="chart-submarkets-bar"></canvas></div>
+    </div>
+  </div>
+
+  <div id="panel-rebuild" class="panel" data-source="aro">
+    <div class="card">
+      <h2>Rebuild eval (address → feasibility + comps)</h2>
+      <p class="summary">Enter a full address (e.g. <code>11407 CLOVERST, LOS ANGELES, CA 90046</code>) or a numeric property ID. ZIP and city are auto-parsed from the address; lookup uses them to find candidates (no street-level match in DB).</p>
+      <div class="form-row">
+        <label>Address or property ID <input type="text" id="rebuild-eval-address" placeholder="e.g. 11407 CLOVERST, LOS ANGELES, CA 90046 or 12345" style="min-width: 320px;" /></label>
+        <label>ZIP (optional, auto-filled from address) <input type="text" id="rebuild-eval-zip" placeholder="90046" style="width: 6rem;" title="Auto-filled when address contains a 5-digit ZIP" /></label>
+        <label>Target size (sq ft) <input type="number" id="rebuild-eval-target-sqft" value="2700" min="1" style="width: 6rem;" /></label>
+        <button type="button" class="primary" id="btn-rebuild-eval">Run rebuild eval</button>
+      </div>
+      <div id="rebuild-eval-error" class="error"></div>
+      <div id="rebuild-eval-result-wrap" style="display: none;">
+        <div class="rebuild-eval-section" id="rebuild-eval-header">
+          <h4>Resolved</h4>
+          <div id="rebuild-eval-resolved"></div>
+        </div>
+        <div class="rebuild-eval-section" id="rebuild-eval-property-info-wrap" style="display: none;">
+          <h4>Property info (MLS)</h4>
+          <div id="rebuild-eval-property-info"></div>
+        </div>
+        <div class="rebuild-eval-section" id="rebuild-eval-footprint-wrap" style="display: none;">
+          <h4>Parcel footprint</h4>
+          <div id="rebuild-eval-footprint"></div>
+        </div>
+        <div class="rebuild-eval-section" id="rebuild-eval-attom-wrap" style="display: none;">
+          <h4>Attom: Improvement &amp; lot</h4>
+          <div id="rebuild-eval-attom"></div>
+        </div>
+        <div class="rebuild-eval-section" id="rebuild-eval-zoning-wrap" style="display: none;">
+          <h4>Zoning</h4>
+          <div id="rebuild-eval-zoning"></div>
+        </div>
+        <div class="rebuild-eval-section" id="rebuild-eval-buildable-wrap" style="display: none;">
+          <h4>Buildable footprint</h4>
+          <p class="summary" style="margin-bottom: 0.5rem;">Buildable pad from lot dimensions minus zone setbacks (front, rear, side).</p>
+          <div id="rebuild-eval-buildable"></div>
+        </div>
+        <div class="rebuild-eval-section" id="rebuild-eval-feasibility-wrap">
+          <h4>Feasibility</h4>
+          <div id="rebuild-eval-feasibility"></div>
+        </div>
+        <div class="rebuild-eval-section" id="rebuild-eval-comps-wrap">
+          <h4>Comps economics</h4>
+          <div id="rebuild-eval-comps"></div>
+        </div>
+        <div class="rebuild-eval-section" id="rebuild-eval-heatmaps">
+          <h4>Neighborhood context</h4>
+          <p class="summary" style="margin-bottom: 0.5rem;">Lot size and home size distributions in this area (same ZIP/city as resolved parcel).</p>
+          <div class="form-row" style="margin-bottom: 0.5rem;">
+            <label>Year built <input type="number" id="rebuild-eval-year-from" value="2010" min="1900" style="width: 5rem;" /> – <input type="number" id="rebuild-eval-year-to" value="2024" min="1900" style="width: 5rem;" /></label>
+            <label>Lot bucket (sq ft) <input type="number" id="rebuild-eval-lot-bucket" value="5000" min="500" style="width: 5rem;" /></label>
+            <label>Home bucket (sq ft) <input type="number" id="rebuild-eval-home-bucket" value="500" min="100" style="width: 5rem;" /></label>
+          </div>
+          <div class="form-row">
+            <button type="button" class="primary" id="btn-rebuild-eval-lotsize-heatmap">Load lot size heatmap</button>
+            <button type="button" class="primary" id="btn-rebuild-eval-homesize-heatmap">Load home size heatmap</button>
+          </div>
+          <div id="rebuild-eval-heatmap-error" class="error"></div>
+          <div id="rebuild-eval-lotsize-result" class="summary" style="margin-top: 0.5rem;"></div>
+          <div class="chart-wrap" style="height: 220px; margin-top: 0.25rem;"><canvas id="chart-rebuild-eval-lotsize"></canvas></div>
+          <div id="rebuild-eval-lotsize-wrap" style="overflow-x: auto; margin-top: 0.25rem;"></div>
+          <div id="rebuild-eval-homesize-result" class="summary" style="margin-top: 0.75rem;"></div>
+          <div class="chart-wrap" style="height: 220px; margin-top: 0.25rem;"><canvas id="chart-rebuild-eval-homesize"></canvas></div>
+          <div id="rebuild-eval-homesize-wrap" style="overflow-x: auto; margin-top: 0.25rem;"></div>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <h2>Rebuild – Address (what can we build here?)</h2>
+      <p class="summary">Check feasibility for a target product on a parcel. Pass/Fail, reasons, recommended size band, and expected price/DOM.</p>
+      <div class="form-row">
+        <label>Property ID <input type="number" id="rebuild-property-id" placeholder="e.g. 12345" min="1" /></label>
+        <label>Target size (sq ft) <input type="number" id="rebuild-target-sqft" placeholder="2700" min="1" value="2700" /></label>
+        <label>Product type <select id="rebuild-product-type"><option value="SINGLE FAMILY RESIDENCE">SFR</option><option value="DUPLEX">Duplex</option></select></label>
+        <label>Lot width (ft) <input type="number" id="rebuild-lot-width" placeholder="optional" min="1" step="1" /></label>
+        <label>Lot depth (ft) <input type="number" id="rebuild-lot-depth" placeholder="optional" min="1" step="1" /></label>
+        <button type="button" class="primary" id="btn-rebuild-feasibility">Check feasibility</button>
+      </div>
+      <div id="rebuild-error" class="error"></div>
+      <div id="rebuild-result" class="summary"></div>
+      <div id="rebuild-reasons" class="summary" style="color: var(--muted); font-size: 0.85rem;"></div>
+      <div id="rebuild-economics" class="summary" style="margin-top: 0.5rem;"></div>
+    </div>
+    <div class="card">
+      <h2>Rebuild – Where to build</h2>
+      <p class="summary">Ranked ZIPs or submarkets for a target product size. Lot requirements and supply counts per area.</p>
+      <div class="form-row">
+        <label>Target size (sq ft) <input type="number" id="where-target-sqft" value="2700" min="1" /></label>
+        <label>Product type <select id="where-product-type"><option value="SINGLE FAMILY RESIDENCE">SFR</option></select></label>
+        <label>Geography <select id="where-geography"><option value="zip">ZIP</option><option value="city">City (submarket)</option></select></label>
+        <button type="button" class="primary" id="btn-where-rank">Load ranking</button>
+      </div>
+      <div id="where-error" class="error"></div>
+      <div id="where-summary" class="summary"></div>
+      <div id="where-table-wrap"></div>
+      <div class="chart-wrap" id="where-chart-wrap"><canvas id="chart-where-bar"></canvas></div>
+    </div>
+    <div class="card">
+      <h2>Rebuild – Site search (no address)</h2>
+      <p class="summary">Don’t have a specific parcel? Enter target size and footprint, and we’ll list parcels where zoning × lot size × dimensions could support that product.</p>
+      <div class="form-row">
+        <label>Target size (sq ft) <input type="number" id="site-target-sqft" value="1500" min="1" /></label>
+        <label>Min lot width (ft) <input type="number" id="site-min-width" placeholder="e.g. 30" min="1" /></label>
+        <label>Min lot depth (ft) <input type="number" id="site-min-depth" placeholder="e.g. 50" min="1" /></label>
+      </div>
+      <div class="form-row">
+        <label>ZIP (optional) <input type="text" id="site-zip" placeholder="e.g. 91207" /></label>
+        <label>Zones (optional, comma-separated) <input type="text" id="site-zones" placeholder="e.g. R1, RS" style="min-width: 180px;" /></label>
+        <label>Limit <input type="number" id="site-limit" value="50" min="1" max="500" /></label>
+        <button type="button" class="primary" id="btn-site-search">Find parcels</button>
+      </div>
+      <div id="site-error" class="error"></div>
+      <div id="site-summary" class="summary"></div>
+      <div id="site-table-wrap"></div>
+    </div>
+    <div class="card">
+      <h2>Target pipeline (aggregate value)</h2>
+      <p class="summary">Same filters as site search: target product size, optional “50 years old, ~1,400 sq ft” and ZIP. Returns <strong>parcel count</strong> and <strong>total value created</strong> (new-build value − existing) for that product.</p>
+      <div class="form-row">
+        <label>Target home size (sq ft) <input type="number" id="tp-target-sqft" value="2700" min="1" /></label>
+        <label>Max year built (e.g. 1975 = 50+ yr) <input type="number" id="tp-max-year" placeholder="optional" min="1900" max="2030" /></label>
+        <label>Min living sq ft <input type="number" id="tp-min-living" placeholder="target × 0.85" min="1" title="Current home size filter. If blank, uses target ±15%." /></label>
+        <label>Max living sq ft <input type="number" id="tp-max-living" placeholder="target × 1.15" min="1" title="Current home size filter. Target must be in [min, max] ±15%." /></label>
+      </div>
+      <div class="form-row">
+        <label>ZIP (optional) <input type="text" id="tp-zip" placeholder="e.g. 91207" /></label>
+        <label>Limit (parcels) <input type="number" id="tp-limit" value="5000" min="1" max="10000" /></label>
+        <button type="button" class="primary" id="btn-target-pipeline">Get summary</button>
+      </div>
+      <div id="tp-error" class="error"></div>
+      <div id="tp-summary" class="summary"></div>
+    </div>
+    <div class="card">
+      <h2>Rebuild – Portfolio ranking</h2>
+      <p class="summary">Rank parcels by feasibility and margin. Enter property IDs (comma-separated), target size, then Load.</p>
+      <div class="form-row">
+        <label>Property IDs <input type="text" id="portfolio-ids" placeholder="e.g. 12345, 12346, 12347" style="min-width: 220px;" /></label>
+        <label>Target size (sq ft) <input type="number" id="portfolio-target-sqft" value="2700" min="1" /></label>
+        <button type="button" class="primary" id="btn-portfolio-rank">Rank portfolio</button>
+      </div>
+      <div id="portfolio-error" class="error"></div>
+      <div id="portfolio-summary" class="summary"></div>
+      <div id="portfolio-table-wrap"></div>
+    </div>
+  </div>
+
+  <div id="panel-property-details" class="panel" data-source="attom">
+    <div class="card">
+      <h2>Property details (Attom)</h2>
+      <p class="summary">Look up a property by full address – similar to Zillow home details. Data from <strong>Attom</strong> (address, beds/baths, sq ft, lot, year built, sale, value estimate).</p>
+      <div class="form-row">
+        <label>Address <input type="text" id="attom-address" placeholder="e.g. 11401 Clover Ave, Los Angeles, CA 90066" style="min-width: 340px;" /></label>
+        <button type="button" class="primary" id="btn-attom-lookup">Look up</button>
+      </div>
+      <div id="attom-error" class="error"></div>
+      <div id="attom-result-wrap" style="display: none; margin-top: 1rem;">
+        <div class="rebuild-eval-section">
+          <h4 id="attom-address-heading" style="font-size: 1.1rem; margin-bottom: 0.5rem;"></h4>
+          <div id="attom-zestimate-block" style="margin-bottom: 1rem; padding: 0.75rem; background: var(--bg); border-radius: 6px; border: 1px solid var(--border);"></div>
+          <div id="attom-stats-row" style="display: flex; flex-wrap: wrap; gap: 1rem 1.5rem; margin-bottom: 1rem; padding: 0.75rem; background: var(--bg); border-radius: 6px; border: 1px solid var(--border); font-size: 0.95rem;"></div>
+          <div id="attom-hero" class="summary" style="font-size: 1rem; margin-bottom: 0.75rem;"></div>
+          <div id="attom-ppsf-rent" class="summary" style="font-size: 0.9rem; color: var(--muted); margin-bottom: 1rem;"></div>
+          <h5 style="font-size: 0.95rem; margin: 1rem 0 0.5rem; color: var(--accent);">Home value</h5>
+          <div id="attom-value-section" class="summary" style="margin-bottom: 1rem;"></div>
+          <h5 style="font-size: 0.95rem; margin: 1rem 0 0.5rem; color: var(--accent);">Facts &amp; features</h5>
+          <table id="attom-details-table" style="width: 100%; margin-bottom: 1rem;"></table>
+          <h5 style="font-size: 0.95rem; margin: 1rem 0 0.5rem; color: var(--accent);">Price history</h5>
+          <div id="attom-price-history" class="summary" style="font-size: 0.9rem;"></div>
+          <h5 style="font-size: 0.95rem; margin: 1rem 0 0.5rem; color: var(--accent);">Rebuild eval (Attom)</h5>
+          <p style="font-size: 0.85rem; color: var(--muted); margin: 0 0 0.5rem;">Run a rebuild evaluation using <strong>Attom data only</strong>: feasibility (does target fit?), buildable footprint, existing value, and value accretion. No Aro DB required.</p>
+          <div class="form-row" style="margin-bottom: 0.5rem;">
+            <label>Target sqft <input type="number" id="attom-rebuild-target-sqft" placeholder="2700" value="2700" min="1" step="100" style="width: 6rem;" /></label>
+            <button type="button" class="primary" id="btn-attom-rebuild-features">Run rebuild eval</button>
+          </div>
+          <div id="attom-rebuild-features-wrap" style="font-size: 0.9rem;"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="panel-rebuild-eval-attom" class="panel" data-source="attom">
+    <div class="card">
+      <h2>Rebuild eval (Attom)</h2>
+      <p class="summary">Run a rebuild evaluation using <strong>Attom data only</strong>: enter address and target sqft. Feasibility (does target fit?), buildable footprint, existing value, and value accretion. No Aro DB required.</p>
+      <div class="form-row">
+        <label>Address <input type="text" id="attom-eval-address" placeholder="e.g. 11401 Clover Ave, Los Angeles, CA 90066" style="min-width: 340px;" /></label>
+        <label>Target sqft <input type="number" id="attom-eval-target-sqft" value="2700" min="1" step="100" style="width: 6rem;" /></label>
+        <button type="button" class="primary" id="btn-attom-eval-run">Run rebuild eval</button>
+      </div>
+      <div id="attom-eval-error" class="error"></div>
+      <div id="attom-eval-result" style="margin-top: 1rem; font-size: 0.9rem;"></div>
+    </div>
+
+
+    <div class="card" style="margin-top: 1rem;">
+      <h2>New-build benchmark (Attom)</h2>
+      <p class="summary">
+        Comp set: homes built since <strong>2020</strong> (last 5–6 years) in a ZIP code. New builds sell at a premium — no new builds is a <strong>negative signal</strong>.
+        Returns p25/median/p75 PPSF and days-on-market from Attom <code>/sale/snapshot</code>.
+      </p>
+      <div class="form-row">
+        <label>ZIP code <input type="text" id="nbb-zip" placeholder="e.g. 90066" style="width: 8rem;" /></label>
+        <label>Min year built <input type="number" id="nbb-min-year" value="2020" min="2000" max="2030" step="1" style="width: 6rem;" /></label>
+        <label>Max records <input type="number" id="nbb-page-size" value="100" min="1" max="200" step="10" style="width: 5rem;" /></label>
+        <button type="button" class="primary" id="btn-nbb-run">Run benchmark</button>
+      </div>
+      <div id="nbb-error" class="error"></div>
+      <div id="nbb-result" style="margin-top: 1rem; font-size: 0.9rem;"></div>
+    </div>
+
+    <div class="card" style="margin-top: 1rem;">
+      <h2>New-build map (Attom)</h2>
+      <p class="summary">
+        Plot new-build sales on a map. Each dot = one sale. Color by
+        <strong>home size</strong> (living sqft), <strong>lot size</strong>, or <strong>PPSF</strong>.
+        Cool blue = small/cheap · warm red = large/expensive.
+        Leave ZIP blank to search the <strong>whole LA area</strong> by radius.
+      </p>
+      <div class="form-row">
+        <label>ZIP code <small style="color:var(--muted);">(blank = all LA)</small>
+          <input type="text" id="nbm-zip" placeholder="blank = all LA" style="width: 9rem;" />
+        </label>
+        <label id="nbm-radius-wrap">Radius (mi)
+          <input type="number" id="nbm-radius" value="20" min="1" max="50" step="1" style="width: 5rem;" />
+        </label>
+        <label>Min year built <input type="number" id="nbm-min-year" value="2020" min="2000" max="2030" step="1" style="width: 6rem;" /></label>
+        <label>Max records <input type="number" id="nbm-page-size" value="100" min="1" max="200" step="10" style="width: 5rem;" /></label>
+        <label>Color by
+          <select id="nbm-color-by" style="height: 2rem; border-radius: 6px; border: 1px solid var(--border); background: var(--surface); color: var(--text); padding: 0 0.4rem;">
+            <option value="living_sq_ft">Home size (living sqft)</option>
+            <option value="lot_sq_ft">Lot size (sqft)</option>
+            <option value="ppsf">PPSF ($/sqft)</option>
+          </select>
+        </label>
+        <button type="button" class="primary" id="btn-nbm-run">Load map</button>
+      </div>
+      <div id="nbm-error" class="error"></div>
+      <div id="nbm-summary" style="font-size: 0.82rem; color: var(--muted); margin: 0.35rem 0;"></div>
+      <div id="nbm-legend" style="display:none; font-size: 0.8rem; margin-bottom: 0.4rem;"></div>
+      <div id="nbm-map" style="height: 440px; border-radius: 8px; border: 1px solid var(--border); background: #1a1a2e;"></div>
+    </div>
+  </div>
+
+  <!-- ── Attom: Site search ──────────────────────────────────────────── -->
+  <div id="panel-site-search-attom" class="panel" data-source="attom">
+    <div class="card">
+      <h2>Site search</h2>
+      <p class="summary">
+        Find density &amp; incidence of target properties, optimize product mix, and map value accretion —
+        all from shared filters. Leave ZIP blank to search across all of LA.
+      </p>
+      <div class="form-row" style="flex-wrap:wrap; gap:0.5rem 1.2rem;">
+        <label>ZIP <small style="color:var(--muted);">(blank = all LA)</small>
+          <input type="text" id="ss-zip" placeholder="blank = all LA" style="width:9rem;" />
+        </label>
+        <label id="ss-radius-wrap">Radius (mi)
+          <input type="number" id="ss-radius" value="20" min="1" max="50" step="1" style="width:5rem;" />
+        </label>
+        <label>Max year built
+          <input type="number" id="ss-max-year" value="1975" min="1900" max="2010" step="1" style="width:5.5rem;" title="~50 years old ≈ 1975" />
+        </label>
+        <label>Min home sqft
+          <input type="number" id="ss-min-sqft" value="1100" min="200" max="5000" step="100" style="width:5.5rem;" />
+        </label>
+        <label>Max home sqft
+          <input type="number" id="ss-max-sqft" value="1700" min="200" max="5000" step="100" style="width:5.5rem;" />
+        </label>
+        <label>Target build sqft
+          <input type="number" id="ss-target-sqft" value="2700" min="500" max="8000" step="100" style="width:5.5rem;" title="New home size to test feasibility" />
+        </label>
+        <label>Max records
+          <input type="number" id="ss-page-size" value="200" min="1" max="500" step="50" style="width:5rem;" />
+        </label>
+      </div>
+      <div class="form-row" style="flex-wrap:wrap; gap:0.5rem 1.2rem; margin-top:0.5rem;">
+        <span style="font-size:0.82rem; color:var(--muted); align-self:center;">Setbacks (ft):</span>
+        <label>Front <input type="number" id="ss-front-setback" value="20" min="0" max="100" step="1" style="width:4.5rem;" /></label>
+        <label>Rear  <input type="number" id="ss-rear-setback"  value="20" min="0" max="100" step="1" style="width:4.5rem;" /></label>
+        <label>Each side <input type="number" id="ss-side-setback" value="5"  min="0" max="50"  step="1" style="width:4.5rem;" /></label>
+      </div>
+      <div class="form-row" style="flex-wrap:wrap; gap:0.5rem 1.2rem; margin-top:0.5rem; padding-top:0.5rem; border-top:1px solid var(--border);">
+        <span style="font-size:0.82rem; color:var(--muted); align-self:center;">Product mix options:</span>
+        <label style="flex:1; min-width:220px;">Target sizes (sqft, comma-separated)
+          <input type="text" id="pm-target-sizes" value="2100, 2400, 2700, 3000, 3500" style="width:100%;" />
+        </label>
+        <label>Benchmark ZIP <small style="color:var(--muted);">(new builds)</small>
+          <input type="text" id="pm-benchmark-zip" placeholder="same as ZIP" style="width:9rem;" />
+        </label>
+        <label>Comps since
+          <input type="number" id="pm-comps-year" value="2020" min="2000" max="2030" step="1" style="width:5.5rem;" />
+        </label>
+        <button type="button" class="primary" id="btn-ss-run" style="align-self:flex-end; margin-left:auto;">Run all</button>
+      </div>
+      <div id="ss-error" class="error"></div>
+    </div>
+
+    <div id="tss-results-wrap" style="display:none; margin-top:0.75rem;">
+      <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:0.25rem;">
+        <h3 style="margin:0; font-size:1rem; font-weight:600;">Target site search</h3>
+        <span id="tss-status" style="font-size:0.82rem; color:var(--muted);"></span>
+      </div>
+      <div id="tss-error" class="error"></div>
+      <!-- Summary cards -->
+      <div style="display:flex; gap: 0.75rem; flex-wrap: wrap; margin-top: 0.75rem;">
+        <div class="card" style="flex:1; min-width:140px; text-align:center; padding: 1rem;">
+          <div style="font-size:2rem; font-weight:700; color:var(--accent);" id="tss-stat-total">—</div>
+          <div style="font-size:0.8rem; color:var(--muted);">Matching properties</div>
+        </div>
+        <div class="card" style="flex:1; min-width:140px; text-align:center; padding: 1rem;">
+          <div style="font-size:2rem; font-weight:700; color:#16a34a;" id="tss-stat-buildable">—</div>
+          <div style="font-size:0.8rem; color:var(--muted);" id="tss-stat-buildable-label">Buildable lots</div>
+        </div>
+        <div class="card" style="flex:1; min-width:140px; text-align:center; padding: 1rem;">
+          <div style="font-size:2rem; font-weight:700;" id="tss-stat-pct">—</div>
+          <div style="font-size:0.8rem; color:var(--muted);">% buildable</div>
+        </div>
+        <div class="card" style="flex:1; min-width:200px; padding: 1rem;">
+          <div style="font-size:0.75rem; color:var(--muted); margin-bottom:0.3rem;">Lot width (ft) — p25 / median / p75</div>
+          <div style="font-size:1.1rem; font-weight:600;" id="tss-stat-width">—</div>
+          <div style="font-size:0.75rem; color:var(--muted); margin: 0.4rem 0 0.3rem;">Lot depth (ft) — p25 / median / p75</div>
+          <div style="font-size:1.1rem; font-weight:600;" id="tss-stat-depth">—</div>
+        </div>
+      </div>
+
+      <!-- Lot-width distribution bar chart -->
+      <div class="card" style="margin-top: 0.75rem;">
+        <h3 style="font-size:0.95rem; margin:0 0 0.75rem;">Lot-width distribution</h3>
+        <p class="summary" style="margin-bottom:0.5rem; font-size:0.82rem;">Count of matching properties by lot width bucket. Green = fits target sqft; grey = does not fit.</p>
+        <div class="chart-wrap" style="height: 220px;"><canvas id="chart-tss-width"></canvas></div>
+      </div>
+
+      <!-- Baseline PPSF (feeds value accretion / new-build coloring on geographic map) -->
+      <div class="card" style="margin-top: 0.75rem;">
+        <h3 style="font-size:0.95rem; margin:0 0 0.5rem;">Baseline — new-build PPSF by ZIP</h3>
+        <p class="summary" style="font-size:0.8rem; margin-bottom:0.5rem;">
+          New-build PPSF (year_built ≥ 2020) fetched per ZIP. Used for new-build value and value accretion in the map below.
+        </p>
+        <div id="tss-vam-zip-table-wrap" style="overflow-x:auto;"><p style="color:var(--muted); font-size:0.85rem;">Run all to load baseline…</p></div>
+        <div id="tss-vam-footnote" style="font-size:0.78rem; color:var(--muted); margin-top:0.4rem;"></div>
+      </div>
+
+      <!-- Map -->
+      <div class="card" style="margin-top: 0.75rem;">
+        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:0.5rem; flex-wrap:wrap; gap:0.5rem;">
+          <h3 style="font-size:0.95rem; margin:0;">Geographic map</h3>
+          <div style="display:flex; align-items:center; gap:0.75rem; font-size:0.85rem;">
+            <label>Color by
+              <select id="tss-color-by" style="height:1.8rem; border-radius:6px; border:1px solid var(--border); background:var(--surface); color:var(--text); padding:0 0.4rem; margin-left:0.3rem;">
+                <option value="buildable_sq_ft">Buildable sqft</option>
+                <option value="lot_sq_ft">Lot size (sqft)</option>
+                <option value="living_sq_ft">Home size (sqft)</option>
+                <option value="value_accretion">Value accretion ($)</option>
+              </select>
+            </label>
+            <label style="display:flex; align-items:center; gap:0.3rem; cursor:pointer;">
+              <input type="checkbox" id="tss-buildable-only" checked />
+              Buildable only
+            </label>
+          </div>
+        </div>
+        <div id="tss-map-legend" style="font-size:0.78rem; margin-bottom:0.35rem;"></div>
+        <div id="tss-map" style="height: 440px; border-radius: 8px; border: 1px solid var(--border); background: #1a1a2e;"></div>
+        <p style="font-size:0.78rem; color:var(--muted); margin-top:0.3rem;">
+          Green border = fits target sqft · Grey border = does not fit. Hover for address, sizes, existing/new-build value, and accretion when baseline has loaded.
+        </p>
+      </div>
+
+      <!-- Assumptions -->
+      <div class="card" style="margin-top:0.75rem; font-size:0.82rem; color:var(--muted);" id="tss-assumptions"></div>
+    </div>
+
+    <!-- ── Product mix optimizer ─────────────────────────────────────── -->
+    <div id="pm-results-wrap" style="display:none; margin-top:1rem;">
+      <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:0.25rem;">
+        <h3 style="margin:0; font-size:1rem; font-weight:600;">Product mix optimizer</h3>
+        <span id="pm-status" style="font-size:0.82rem; color:var(--muted);"></span>
+      </div>
+      <div id="pm-error" class="error"></div>
+      <!-- Benchmark strip -->
+      <div id="pm-benchmark-strip" class="card" style="padding:0.6rem 1rem; font-size:0.85rem;"></div>
+
+      <!-- Comparison table -->
+      <div class="card" style="margin-top:0.75rem; overflow-x:auto;">
+        <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:0.5rem; margin-bottom:0.75rem;">
+          <h3 style="font-size:0.95rem; margin:0;">Product comparison</h3>
+          <button type="button" id="btn-pm-download-csv" disabled style="padding:0.35rem 0.75rem; border-radius:6px; border:1px solid var(--border); background:var(--surface); color:var(--text); cursor:pointer; font-size:0.85rem;">
+            Download CSV
+          </button>
+        </div>
+        <table id="pm-table" style="width:100%; font-size:0.85rem; border-collapse:collapse;"></table>
+      </div>
+
+      <!-- Dual-axis chart -->
+      <div class="card" style="margin-top:0.75rem;">
+        <h3 style="font-size:0.95rem; margin:0 0 0.5rem;">Quantity vs value creation</h3>
+        <p class="summary" style="font-size:0.8rem; margin-bottom:0.5rem;">
+          Bars = buildable lot count · Left axis. Line = avg value accretion per lot · Right axis.
+          Star ★ = optimal (highest total value created).
+        </p>
+        <div class="chart-wrap" style="height:300px;"><canvas id="chart-pm"></canvas></div>
+      </div>
+
+      <div id="pm-footer" style="font-size:0.78rem; color:var(--muted); margin-top:0.4rem; padding:0 0.25rem;"></div>
     </div>
   </div>
 
@@ -169,23 +699,1148 @@
       return el ? el.value : 'LOS ANGELES';
     }
     function apiPost(path, body) {
-      const b = { ...(body || {}), city_name: (body && body.city_name != null && body.city_name !== '') ? body.city_name : getSelectedCity() };
+      const city = (body && 'city_name' in body) ? body.city_name : getSelectedCity();
+      const b = { ...(body || {}), city_name: city };
       return fetch(API + path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(b) }).then(r => { if (!r.ok) throw new Error(r.status + ' ' + r.statusText); return r.json(); });
     }
     let loadedPropertyCity = null;
+    let currentRegion = null; // { property_id?, zip_code, city_name }
 
-    // Tabs
-    document.querySelectorAll('nav button').forEach(btn => {
+    function setCityDropdown(cityName) {
+      const sel = document.getElementById('city-select');
+      if (!sel || !cityName) return;
+      const u = String(cityName).toUpperCase().trim();
+      for (let i = 0; i < sel.options.length; i++) {
+        if (sel.options[i].value === u) { sel.selectedIndex = i; return; }
+      }
+    }
+
+    document.getElementById('btn-show-region').addEventListener('click', async () => {
+      const input = document.getElementById('address-or-location').value?.trim() || '';
+      const errEl = document.getElementById('region-feasibility-error');
+      if (errEl) errEl.textContent = '';
+      if (!input) {
+        document.getElementById('region-intro-text').innerHTML = 'Enter a <strong>Property ID</strong> or <strong>ZIP code</strong> in the bar above, then click <strong>Show features in this region</strong>.';
+        document.getElementById('region-summary').style.display = 'none';
+        document.getElementById('region-features-wrap').style.display = 'none';
+        return;
+      }
+      const digitsOnly = /^\d+$/.test(input);
+      const asNum = digitsOnly ? parseInt(input, 10) : NaN;
+      const isFiveDigit = digitsOnly && input.length === 5;
+      if (isFiveDigit) {
+        currentRegion = { zip_code: input, city_name: getSelectedCity() };
+        document.getElementById('region-summary').textContent = 'Region: ZIP ' + input + ', ' + currentRegion.city_name;
+        document.getElementById('region-summary').style.display = 'block';
+        document.getElementById('region-features-wrap').style.display = 'block';
+        const fc = document.getElementById('region-card-feasibility');
+        if (fc) fc.style.display = 'none';
+        document.getElementById('comps-zip').value = input;
+        document.getElementById('rebuild-property-id').value = '';
+      } else if (!isNaN(asNum) && asNum > 0) {
+        try {
+          const rows = await apiPost('/queries/property-info', { property_id: asNum });
+          const r = rows[0];
+          if (!r) {
+            document.getElementById('region-summary').textContent = 'No property found for ID ' + asNum + '. Try a ZIP code (5 digits) instead.';
+            document.getElementById('region-summary').style.display = 'block';
+            document.getElementById('region-features-wrap').style.display = 'none';
+            return;
+          }
+          const zip = (r.zip_code && String(r.zip_code).trim()) || '';
+          const city = (r.city_name && String(r.city_name).trim()) || getSelectedCity();
+          if (city) setCityDropdown(city);
+          currentRegion = { property_id: asNum, zip_code: zip, city_name: city };
+          document.getElementById('region-summary').textContent = 'Region: Property ' + asNum + ' · ZIP ' + (zip || '—') + ', ' + city;
+          document.getElementById('region-summary').style.display = 'block';
+          document.getElementById('region-features-wrap').style.display = 'block';
+          const fc = document.getElementById('region-card-feasibility');
+          if (fc) fc.style.display = 'block';
+          document.getElementById('property-id').value = asNum;
+          document.getElementById('rebuild-property-id').value = asNum;
+          document.getElementById('comps-zip').value = zip || document.getElementById('comps-zip').value;
+        } catch (e) {
+          document.getElementById('region-summary').textContent = 'Could not load property: ' + (e.message || 'Request failed.');
+          document.getElementById('region-summary').style.display = 'block';
+          document.getElementById('region-features-wrap').style.display = 'none';
+          return;
+        }
+      } else {
+        document.getElementById('region-summary').textContent = 'Enter a numeric Property ID or a 5-digit ZIP code.';
+        document.getElementById('region-summary').style.display = 'block';
+        document.getElementById('region-features-wrap').style.display = 'none';
+        return;
+      }
+      // Switch to Aro tab and show By address panel
+      setMainTab('aro');
+      showSubNavFor('aro');
+      showPanelsFor('aro');
+      document.querySelectorAll('#sub-nav button').forEach(b => b.classList.remove('active'));
+      document.querySelector('#sub-nav button[data-panel="region"]').classList.add('active');
+      document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+      document.getElementById('panel-region').classList.add('active');
+    });
+
+    let currentMain = 'aro';
+    function setMainTab(main) {
+      currentMain = main;
+      document.querySelectorAll('#main-nav button').forEach(b => b.classList.remove('active'));
+      const mainBtn = document.querySelector('#main-nav button[data-main="' + main + '"]');
+      if (mainBtn) mainBtn.classList.add('active');
+    }
+    function showSubNavFor(main) {
+      document.querySelectorAll('#sub-nav button').forEach(btn => {
+        btn.style.display = btn.dataset.source === main ? '' : 'none';
+      });
+    }
+    function showPanelsFor(main) {
+      document.querySelectorAll('.panel').forEach(p => {
+        p.style.display = p.dataset.source === main ? '' : 'none';
+      });
+    }
+
+    // Main tabs: Aro homes (my data) | Attom
+    document.querySelectorAll('#main-nav button').forEach(btn => {
       btn.addEventListener('click', () => {
-        document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
+        const main = btn.dataset.main;
+        if (!main || main === currentMain) return;
+        setMainTab(main);
+        showSubNavFor(main);
+        showPanelsFor(main);
+        document.querySelectorAll('#sub-nav button').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+        const firstSub = document.querySelector('#sub-nav button[data-source="' + main + '"]');
+        const firstPanel = document.querySelector('.panel[data-source="' + main + '"]');
+        if (firstSub) firstSub.classList.add('active');
+        if (firstPanel) firstPanel.classList.add('active');
+      });
+    });
+
+    // Sub-nav tabs (By address, Comps & market, Rebuild | Property details)
+    document.querySelectorAll('#sub-nav button').forEach(btn => {
+      btn.addEventListener('click', () => {
+        if (btn.dataset.source !== currentMain) return;
+        document.querySelectorAll('#sub-nav button').forEach(b => b.classList.remove('active'));
         document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
         btn.classList.add('active');
         document.getElementById('panel-' + btn.dataset.panel).classList.add('active');
       });
     });
 
-    let chartCompsHistogram = null, chartZipYearBar = null, chartZipTrend = null, chartCityPpsf = null, chartCityVolume = null, chartZipMonth = null;
+    // Initial state: show only Aro sub-nav and panels (Attom hidden)
+    showSubNavFor('aro');
+    showPanelsFor('aro');
+
+    // Property details (Attom) – Zillow-style lookup
+    document.getElementById('btn-attom-lookup').addEventListener('click', async () => {
+      const errEl = document.getElementById('attom-error');
+      const wrapEl = document.getElementById('attom-result-wrap');
+      const addressInput = document.getElementById('attom-address').value?.trim();
+      errEl.textContent = '';
+      wrapEl.style.display = 'none';
+      if (!addressInput) {
+        errEl.textContent = 'Enter a full address.';
+        return;
+      }
+      const btn = document.getElementById('btn-attom-lookup');
+      btn.disabled = true;
+      try {
+        const res = await fetch(API + '/attom/property-details', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ address: addressInput }),
+        });
+        if (!res.ok) throw new Error(res.status + ' ' + res.statusText);
+        const data = await res.json();
+        if (data.error) {
+          errEl.textContent = data.error;
+          return;
+        }
+        const p = data.property || {};
+        const addr = (p.full_address || p.line1 || addressInput).trim();
+        document.getElementById('attom-address-heading').textContent = addr;
+
+        var zestimateHtml = '';
+        var val = p.avm_value != null ? p.avm_value : p.last_sale_amount;
+        if (val != null) {
+          zestimateHtml = '<span style="font-size: 1.5rem; font-weight: 700; color: var(--accent);">$' + Number(val).toLocaleString() + '</span>';
+          if (p.avm_value != null) zestimateHtml += ' <span style="font-size: 0.9rem; color: var(--muted);">Estimated value</span>';
+          else zestimateHtml += ' <span style="font-size: 0.9rem; color: var(--muted);">Last sale</span>';
+        } else {
+          zestimateHtml = '<span style="color: var(--muted);">No value estimate available</span>';
+        }
+        document.getElementById('attom-zestimate-block').innerHTML = zestimateHtml;
+
+        var stats = [
+          { label: 'Beds', value: p.beds != null ? String(p.beds) : '—' },
+          { label: 'Baths', value: p.baths != null ? String(p.baths) : '—' },
+          { label: 'Sq ft', value: p.living_sq_ft != null ? Number(p.living_sq_ft).toLocaleString() : '—' },
+          { label: 'Year built', value: p.year_built != null ? String(p.year_built) : '—' },
+          { label: 'Lot size', value: p.lot_sq_ft != null ? Number(p.lot_sq_ft).toLocaleString() + ' sqft' : '—' }
+        ];
+        document.getElementById('attom-stats-row').innerHTML = stats.map(function(s) {
+          return '<div><span style="color: var(--muted); font-size: 0.85rem;">' + escapeHtml(s.label) + '</span><br><strong>' + escapeHtml(s.value) + '</strong></div>';
+        }).join('');
+
+        const heroParts = [];
+        if (p.beds != null) heroParts.push(p.beds + ' beds');
+        if (p.baths != null) heroParts.push(p.baths + ' baths');
+        if (p.living_sq_ft != null) heroParts.push(Number(p.living_sq_ft).toLocaleString() + ' sqft');
+        if (p.lot_sq_ft != null) heroParts.push(Number(p.lot_sq_ft).toLocaleString() + ' sq ft lot');
+        if (p.lot_width_ft != null && p.lot_depth_ft != null) heroParts.push(Number(p.lot_width_ft) + '×' + Number(p.lot_depth_ft) + ' ft lot');
+        if (p.year_built != null) heroParts.push('Built in ' + p.year_built);
+        if (p.property_type) heroParts.push(escapeHtml(String(p.property_type)));
+        document.getElementById('attom-hero').innerHTML = heroParts.length ? heroParts.join(' &middot; ') : 'No details returned.';
+
+        var ppsfRent = [];
+        if (p.living_sq_ft != null && val != null && p.living_sq_ft > 0) {
+          var ppsf = Math.round(val / p.living_sq_ft);
+          ppsfRent.push('$' + ppsf.toLocaleString() + '/sqft');
+        }
+        if (p.living_sq_ft != null && val != null && p.living_sq_ft > 0) {
+          var rentEst = Math.round((val * 0.04) / 12);
+          ppsfRent.push('Est. rent ~$' + rentEst.toLocaleString() + '/mo');
+        }
+        document.getElementById('attom-ppsf-rent').innerHTML = ppsfRent.length ? ppsfRent.join(' &middot; ') : '';
+
+        let valueHtml = '';
+        if (p.avm_value != null) {
+          valueHtml = '<strong>$' + Number(p.avm_value).toLocaleString() + '</strong> estimated value';
+          if (p.avm_confidence != null) valueHtml += ' (confidence ' + p.avm_confidence + ')';
+          if (p.avm_low != null && p.avm_high != null) valueHtml += ' &middot; Range $' + Number(p.avm_low).toLocaleString() + ' – $' + Number(p.avm_high).toLocaleString();
+          if (p.avm_per_sqft != null) valueHtml += ' &middot; $' + Number(p.avm_per_sqft).toLocaleString(undefined, { maximumFractionDigits: 0 }) + '/sqft';
+        } else if (p.last_sale_amount != null) {
+          valueHtml = 'Last known sale: <strong>$' + Number(p.last_sale_amount).toLocaleString() + '</strong>';
+        } else {
+          valueHtml = 'No value estimate available.';
+        }
+        document.getElementById('attom-value-section').innerHTML = valueHtml;
+
+        const rows = [];
+        if (p.line1) rows.push('<tr><td>Address</td><td>' + escapeHtml(p.line1) + (p.line2 ? '<br>' + escapeHtml(p.line2) : '') + '</td></tr>');
+        if (p.city || p.state || p.zip) rows.push('<tr><td>City / State / ZIP</td><td>' + [p.city, p.state, p.zip].filter(Boolean).join(', ') + '</td></tr>');
+        if (p.beds != null) rows.push('<tr><td>Bedrooms</td><td>' + p.beds + '</td></tr>');
+        if (p.baths != null) rows.push('<tr><td>Bathrooms</td><td>' + p.baths + '</td></tr>');
+        if (p.living_sq_ft != null) rows.push('<tr><td>Total livable area</td><td>' + Number(p.living_sq_ft).toLocaleString() + ' sqft</td></tr>');
+        if (p.lot_sq_ft != null) rows.push('<tr><td>Lot size</td><td>' + Number(p.lot_sq_ft).toLocaleString() + ' sqft</td></tr>');
+        if (p.lot_depth_ft != null) rows.push('<tr><td>Lot depth (ft)</td><td>' + Number(p.lot_depth_ft).toLocaleString() + '</td></tr>');
+        if (p.lot_width_ft != null) rows.push('<tr><td>Lot width / frontage (ft)</td><td>' + Number(p.lot_width_ft).toLocaleString() + '</td></tr>');
+        if (p.year_built != null) rows.push('<tr><td>Year built</td><td>' + p.year_built + '</td></tr>');
+        if (p.property_type) rows.push('<tr><td>Property type</td><td>' + escapeHtml(String(p.property_type)) + '</td></tr>');
+        if (p.assessed_value != null) rows.push('<tr><td>Assessed value</td><td>$' + Number(p.assessed_value).toLocaleString() + '</td></tr>');
+        if (p.tax_amount != null) rows.push('<tr><td>Tax amount</td><td>$' + Number(p.tax_amount).toLocaleString(undefined, { minimumFractionDigits: 2 }) + (p.tax_year != null ? ' (' + p.tax_year + ')' : '') + '</td></tr>');
+        if (p.market_value != null && p.market_value > 0) rows.push('<tr><td>Market value (assessor)</td><td>$' + Number(p.market_value).toLocaleString() + '</td></tr>');
+        if (p.avm_per_sqft != null) rows.push('<tr><td>Est. value per sqft</td><td>$' + Number(p.avm_per_sqft).toLocaleString(undefined, { maximumFractionDigits: 0 }) + '</td></tr>');
+        if (p.latitude != null && p.longitude != null) rows.push('<tr><td>Coordinates</td><td>' + Number(p.latitude) + ', ' + Number(p.longitude) + '</td></tr>');
+        if (p.attom_id) rows.push('<tr><td>Attom ID</td><td>' + escapeHtml(String(p.attom_id)) + '</td></tr>');
+        document.getElementById('attom-details-table').innerHTML = rows.length ? rows.join('') : '<tr><td colspan="2">No details</td></tr>';
+
+        // Show property first; load sale history asynchronously
+        document.getElementById('attom-price-history').innerHTML = '<span style="color: var(--muted);">Loading sale history…</span>';
+        wrapEl.style.display = 'block';
+
+        (async function loadSaleHistory() {
+          try {
+            const shRes = await fetch(API + '/attom/sale-history', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ address: addressInput }),
+            });
+            if (!shRes.ok) {
+              document.getElementById('attom-price-history').innerHTML = '<span class="error">Sale history request failed.</span>';
+              return;
+            }
+            const shData = await shRes.json();
+            if (shData.error) {
+              document.getElementById('attom-price-history').innerHTML = '<span style="color:var(--muted);">' + escapeHtml(shData.error) + '</span>';
+              return;
+            }
+            var priceHistoryHtml = '';
+            var list = shData.sale_history || [];
+            const thSt = 'padding:0.25rem 0.5rem; text-align:left; border-bottom:2px solid var(--border); white-space:nowrap; font-size:0.82rem; color:var(--muted);';
+            const tdSt = 'padding:0.25rem 0.5rem; border-bottom:1px solid var(--border); font-size:0.85rem;';
+            const tdStR = tdSt + ' text-align:right;';
+            if (list.length > 0) {
+              priceHistoryHtml = '<table style="width:100%; border-collapse:collapse;">'
+                + '<thead><tr>'
+                + '<th style="' + thSt + '">Date</th>'
+                + '<th style="' + thSt + '">Event</th>'
+                + '<th style="' + thSt + ' text-align:right;">Price</th>'
+                + '<th style="' + thSt + ' text-align:right;">$/sqft</th>'
+                + '</tr></thead><tbody>';
+              list.forEach(function(s) {
+                var ev = (s.sale_type && String(s.sale_type).trim()) || 'Sold';
+                var price = s.sale_amount != null ? '$' + Number(s.sale_amount).toLocaleString() : '—';
+                var ppsf  = s.price_per_sqft != null ? '$' + Number(s.price_per_sqft).toLocaleString(undefined, {maximumFractionDigits:0}) : '—';
+                priceHistoryHtml += '<tr>'
+                  + '<td style="' + tdSt + '">' + escapeHtml(s.sale_date || '—') + '</td>'
+                  + '<td style="' + tdSt + '">' + escapeHtml(ev) + '</td>'
+                  + '<td style="' + tdStR + '">' + price + '</td>'
+                  + '<td style="' + tdStR + '">' + ppsf  + '</td>'
+                  + '</tr>';
+              });
+              priceHistoryHtml += '</tbody></table>';
+            } else if (p.last_sale_amount != null || p.last_sale_date) {
+              priceHistoryHtml = '<table style="width:100%; border-collapse:collapse;">'
+                + '<thead><tr>'
+                + '<th style="' + thSt + '">Date</th>'
+                + '<th style="' + thSt + '">Event</th>'
+                + '<th style="' + thSt + ' text-align:right;">Price</th>'
+                + '</tr></thead><tbody>'
+                + '<tr>'
+                + '<td style="' + tdSt + '">' + escapeHtml(p.last_sale_date || '—') + '</td>'
+                + '<td style="' + tdSt + '">Sold</td>'
+                + '<td style="' + tdStR + '">' + (p.last_sale_amount != null ? '$' + Number(p.last_sale_amount).toLocaleString() : '—') + '</td>'
+                + '</tr></tbody></table>'
+                + '<p style="font-size:0.78rem; color:var(--muted); margin:0.3rem 0 0;">Most recent sale from property record; full history not available for this property.</p>';
+            } else {
+              priceHistoryHtml = '<span style="color:var(--muted); font-size:0.85rem;">No sale history available for this property.</span>';
+            }
+            document.getElementById('attom-price-history').innerHTML = priceHistoryHtml;
+          } catch (e) {
+            document.getElementById('attom-price-history').innerHTML = '<span class="error">Could not load sale history.</span>';
+          }
+        })();
+      } catch (e) {
+        errEl.textContent = e.message || 'Lookup failed.';
+      } finally {
+        btn.disabled = false;
+      }
+    });
+
+    // Rebuild features (Attom) – load on demand
+    document.getElementById('btn-attom-rebuild-features').addEventListener('click', async () => {
+      const wrapEl = document.getElementById('attom-rebuild-features-wrap');
+      const addressInput = document.getElementById('attom-address').value?.trim();
+      const targetSqftInput = document.getElementById('attom-rebuild-target-sqft').value?.trim();
+      const targetSqft = targetSqftInput ? parseFloat(targetSqftInput) : null;
+      wrapEl.innerHTML = '<span style="color: var(--muted);">Loading…</span>';
+      if (!addressInput) {
+        wrapEl.innerHTML = '<span class="error">Enter an address and run Look up first, or enter address above.</span>';
+        return;
+      }
+      try {
+        const body = { address: addressInput };
+        if (targetSqft != null && targetSqft > 0) body.target_living_sq_ft = targetSqft;
+        const res = await fetch(API + '/attom/rebuild-features', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        if (!res.ok) {
+          wrapEl.innerHTML = '<span class="error">Request failed.</span>';
+          return;
+        }
+        const data = await res.json();
+        if (data.error) {
+          wrapEl.innerHTML = '<span class="error">' + escapeHtml(data.error) + '</span>';
+          return;
+        }
+        wrapEl.innerHTML = renderAttomRebuildEval(data.rebuild_features || {}, targetSqft);
+      } catch (e) {
+        wrapEl.innerHTML = '<span class="error">Could not load rebuild features.</span>';
+      }
+    });
+
+    // Shared: render Attom rebuild eval result
+    function renderAttomRebuildEval(f, targetSqft) {
+      let html = '';
+      if (f.fits_target_sqft === true) {
+        html += '<p style="margin: 0 0 0.75rem;"><span class="rebuild-eval-badge valid">Pass</span> Target sqft fits on this lot (buildable area from Attom + assumed setbacks).</p>';
+      } else if (f.fits_target_sqft === false) {
+        html += '<p style="margin: 0 0 0.75rem;"><span class="rebuild-eval-badge invalid">Fail</span> Target sqft does not fit (buildable area &lt; target).</p>';
+      } else if (targetSqft != null && targetSqft > 0) {
+        html += '<p style="margin: 0 0 0.75rem; color: var(--muted);">Feasibility unknown (no buildable footprint or target).</p>';
+      }
+      if (f.buildable_width_ft != null || f.buildable_depth_ft != null || f.buildable_sq_ft != null) {
+        html += '<p style="margin: 0 0 0.25rem;"><strong>Buildable footprint</strong> (lot minus assumed setbacks)</p><p style="margin: 0 0 0.75rem; font-size: 0.9rem;">';
+        if (f.buildable_width_ft != null && f.buildable_depth_ft != null) html += Number(f.buildable_width_ft) + ' × ' + Number(f.buildable_depth_ft) + ' ft';
+        if (f.buildable_sq_ft != null) html += (html ? ' = ' : '') + Number(f.buildable_sq_ft).toLocaleString() + ' sq ft';
+        if (f.buildable_notes) html += ' &middot; ' + escapeHtml(f.buildable_notes);
+        html += '</p>';
+      }
+      if (f.suggested_existing_value != null) {
+        html += '<p style="margin: 0 0 0.25rem;"><strong>Existing value</strong> (Attom: ' + (f.suggested_existing_value_source || 'avm') + ')</p><p style="margin: 0 0 0.75rem;" class="rebuild-eval-price">$' + Number(f.suggested_existing_value).toLocaleString() + '</p>';
+      }
+      if (targetSqft != null && targetSqft > 0 && f.value_per_sqft != null && f.suggested_existing_value != null) {
+        var newBuildVal = f.value_per_sqft * targetSqft;
+        var accretion = newBuildVal - f.suggested_existing_value;
+        html += '<p style="margin: 0 0 0.25rem;"><strong>Value accretion</strong> (estimated new build − existing)</p><p style="margin: 0 0 0.75rem; font-size: 0.9rem;">New build ~$' + Math.round(newBuildVal).toLocaleString() + ' (' + Number(f.value_per_sqft).toLocaleString() + '/sqft × ' + targetSqft + ') − $' + Number(f.suggested_existing_value).toLocaleString() + ' = <strong class="rebuild-eval-price">$' + Math.round(accretion).toLocaleString() + '</strong></p>';
+      }
+      const rows = [];
+      if (f.suggested_existing_value != null) rows.push(['Suggested existing value', '$' + Number(f.suggested_existing_value).toLocaleString() + (f.suggested_existing_value_source ? ' (' + escapeHtml(f.suggested_existing_value_source) + ')' : '')]);
+      if (f.avm_value != null) rows.push(['AVM value', '$' + Number(f.avm_value).toLocaleString()]);
+      if (f.value_per_sqft != null) rows.push(['Value per sqft', '$' + Number(f.value_per_sqft).toLocaleString()]);
+      if (f.living_sq_ft != null) rows.push(['Living sqft', Number(f.living_sq_ft).toLocaleString()]);
+      if (f.gap_to_target_sqft != null) rows.push(['Gap to target sqft', Number(f.gap_to_target_sqft).toLocaleString()]);
+      if (f.buildable_sq_ft != null) rows.push(['Buildable sqft', Number(f.buildable_sq_ft).toLocaleString()]);
+      if (f.fits_target_sqft !== undefined && f.fits_target_sqft !== null) rows.push(['Fits target sqft', f.fits_target_sqft ? 'Yes' : 'No']);
+      if (f.year_built != null) rows.push(['Year built', String(f.year_built)]);
+      if (f.beds != null) rows.push(['Beds', String(f.beds)]);
+      if (f.baths != null) rows.push(['Baths', String(f.baths)]);
+      if (f.lot_sq_ft != null) rows.push(['Lot sqft', Number(f.lot_sq_ft).toLocaleString()]);
+      if (f.lot_width_ft != null) rows.push(['Lot width (ft)', Number(f.lot_width_ft)]);
+      if (f.lot_depth_ft != null) rows.push(['Lot depth (ft)', Number(f.lot_depth_ft)]);
+      if (f.assessed_value != null) rows.push(['Assessed value', '$' + Number(f.assessed_value).toLocaleString()]);
+      if (f.tax_amount != null) rows.push(['Tax amount', '$' + Number(f.tax_amount).toLocaleString() + (f.tax_year != null ? ' (' + f.tax_year + ')' : '')]);
+      if (f.sale_count != null && f.sale_count > 0) rows.push(['Sale count', String(f.sale_count)]);
+      if (rows.length > 0) {
+        html += '<p style="margin: 0.5rem 0 0.25rem;"><strong>Details</strong></p><table style="width: 100%; font-size: 0.85rem;"><tr><th style="text-align: left;">Field</th><th style="text-align: left;">Value</th></tr>' + rows.map(function(r) { return '<tr><td>' + escapeHtml(r[0]) + '</td><td>' + r[1] + '</td></tr>'; }).join('') + '</table>';
+      }
+      return html || '<span style="color: var(--muted);">No rebuild features returned.</span>';
+    }
+
+    // Rebuild eval (Attom) – standalone panel
+    document.getElementById('btn-attom-eval-run').addEventListener('click', async () => {
+      const resultEl = document.getElementById('attom-eval-result');
+      const errEl = document.getElementById('attom-eval-error');
+      const addressInput = document.getElementById('attom-eval-address').value?.trim();
+      const targetSqft = parseFloat(document.getElementById('attom-eval-target-sqft').value) || 2700;
+      errEl.textContent = '';
+      resultEl.innerHTML = '<span style="color: var(--muted);">Loading…</span>';
+      if (!addressInput) {
+        errEl.textContent = 'Enter an address.';
+        resultEl.innerHTML = '';
+        return;
+      }
+      try {
+        const body = { address: addressInput, target_living_sq_ft: targetSqft };
+        const res = await fetch(API + '/attom/rebuild-features', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+        if (!res.ok) { resultEl.innerHTML = '<span class="error">Request failed.</span>'; return; }
+        const data = await res.json();
+        if (data.error) { resultEl.innerHTML = '<span class="error">' + escapeHtml(data.error) + '</span>'; return; }
+        const f = data.rebuild_features || {};
+        resultEl.innerHTML = renderAttomRebuildEval(f, targetSqft);
+      } catch (e) {
+        resultEl.innerHTML = '<span class="error">' + escapeHtml(e.message || 'Request failed') + '</span>';
+      }
+    });
+
+    // New-build benchmark (Attom) – standalone card in Rebuild eval panel
+    document.getElementById('btn-nbb-run').addEventListener('click', async () => {
+      const resultEl = document.getElementById('nbb-result');
+      const errEl = document.getElementById('nbb-error');
+      const zipCode = (document.getElementById('nbb-zip').value || '').trim();
+      const minYear = parseInt(document.getElementById('nbb-min-year').value, 10) || 2020;
+      const pageSize = parseInt(document.getElementById('nbb-page-size').value, 10) || 100;
+      errEl.textContent = '';
+      resultEl.innerHTML = '<span style="color: var(--muted);">Loading…</span>';
+      if (!zipCode) {
+        errEl.textContent = 'Enter a ZIP code.';
+        resultEl.innerHTML = '';
+        return;
+      }
+      try {
+        const res = await fetch(API + '/attom/new-build-benchmark', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ zip_code: zipCode, min_year_built: minYear, page_size: pageSize }),
+        });
+        if (!res.ok) { resultEl.innerHTML = '<span class="error">Request failed (' + res.status + ').</span>'; return; }
+        const data = await res.json();
+        if (data.error) { resultEl.innerHTML = '<span class="error">' + escapeHtml(data.error) + '</span>'; return; }
+        resultEl.innerHTML = renderNewBuildBenchmark(data);
+      } catch (e) {
+        resultEl.innerHTML = '<span class="error">' + escapeHtml(e.message || 'Request failed') + '</span>';
+      }
+    });
+
+    function renderNewBuildBenchmark(d) {
+      const fmt$ = v => v != null ? '$' + Number(v).toLocaleString(undefined, { maximumFractionDigits: 0 }) : '—';
+      const fmt1 = v => v != null ? Number(v).toLocaleString(undefined, { maximumFractionDigits: 1 }) : '—';
+      const signalBadge = d.has_new_builds
+        ? '<span style="background:#16a34a;color:#fff;padding:0.15rem 0.6rem;border-radius:12px;font-size:0.8rem;font-weight:600;">✓ New builds present</span>'
+        : '<span style="background:#dc2626;color:#fff;padding:0.15rem 0.6rem;border-radius:12px;font-size:0.8rem;font-weight:600;">⚠ No new builds — negative signal</span>';
+      let html = `<div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:0.5rem;">${signalBadge}<span style="color:var(--muted);font-size:0.82rem;">${escapeHtml(d.note)}</span></div>`;
+      if (d.sale_count > 0) {
+        html += `<table style="width:100%;font-size:0.85rem;border-collapse:collapse;">
+          <thead><tr>
+            <th style="text-align:left;padding:0.3rem 0.5rem;border-bottom:1px solid var(--border);">Metric</th>
+            <th style="text-align:right;padding:0.3rem 0.5rem;border-bottom:1px solid var(--border);">p25</th>
+            <th style="text-align:right;padding:0.3rem 0.5rem;border-bottom:1px solid var(--border);">Median</th>
+            <th style="text-align:right;padding:0.3rem 0.5rem;border-bottom:1px solid var(--border);">p75</th>
+          </tr></thead>
+          <tbody>
+            <tr>
+              <td style="padding:0.3rem 0.5rem;">PPSF ($/sqft)</td>
+              <td style="text-align:right;padding:0.3rem 0.5rem;">${fmt$(d.p25_ppsf)}</td>
+              <td style="text-align:right;padding:0.3rem 0.5rem;font-weight:600;">${fmt$(d.median_ppsf)}</td>
+              <td style="text-align:right;padding:0.3rem 0.5rem;">${fmt$(d.p75_ppsf)}</td>
+            </tr>
+            <tr>
+              <td style="padding:0.3rem 0.5rem;">Days on market</td>
+              <td style="text-align:right;padding:0.3rem 0.5rem;">${fmt1(d.p25_dom)}</td>
+              <td style="text-align:right;padding:0.3rem 0.5rem;font-weight:600;">${fmt1(d.median_dom)}</td>
+              <td style="text-align:right;padding:0.3rem 0.5rem;">${fmt1(d.p75_dom)}</td>
+            </tr>
+          </tbody>
+        </table>`;
+        html += `<p style="margin:0.5rem 0 0;font-size:0.8rem;color:var(--muted);">Based on ${d.sale_count} sale(s) with PPSF data · ZIP ${escapeHtml(d.zip_code)} · year_built ≥ ${d.min_year_built}</p>`;
+      }
+      return html;
+    }
+
+    // ── New-build map (Attom) ───────────────────────────────────────────────
+    let newBuildMapInstance = null;
+    let newBuildMapMarkers = [];
+
+    function colorForValue(val, minVal, maxVal) {
+      // Blue (cold, small) → Red (warm, large), via green
+      const t = maxVal > minVal ? Math.max(0, Math.min(1, (val - minVal) / (maxVal - minVal))) : 0.5;
+      // Interpolate: blue(0,0,255) → green(0,200,0) → red(220,0,0)
+      let r, g, b;
+      if (t < 0.5) {
+        const s = t * 2;
+        r = Math.round(0 + s * 0);
+        g = Math.round(0 + s * 200);
+        b = Math.round(255 - s * 255);
+      } else {
+        const s = (t - 0.5) * 2;
+        r = Math.round(0 + s * 220);
+        g = Math.round(200 - s * 200);
+        b = 0;
+      }
+      return `rgb(${r},${g},${b})`;
+    }
+
+    function makeLegend(minVal, maxVal, colorByLabel) {
+      const steps = 5;
+      let html = `<strong>${colorByLabel}:</strong> `;
+      for (let i = 0; i <= steps; i++) {
+        const v = minVal + (maxVal - minVal) * (i / steps);
+        const c = colorForValue(v, minVal, maxVal);
+        let label;
+        if (colorByLabel.includes('PPSF')) label = '$' + Math.round(v) + '/sqft';
+        else if (colorByLabel.includes('sqft')) label = Math.round(v).toLocaleString() + ' sqft';
+        else if (colorByLabel.includes('($)')) label = '$' + Math.round(v).toLocaleString();
+        else label = Math.round(v).toLocaleString();
+        html += `<span style="display:inline-flex;align-items:center;gap:3px;margin-right:8px;">
+          <span style="width:12px;height:12px;border-radius:50%;background:${c};display:inline-block;"></span>${label}</span>`;
+      }
+      return html;
+    }
+
+    // Show/hide radius input based on whether ZIP is filled
+    document.getElementById('nbm-zip').addEventListener('input', () => {
+      const hasZip = (document.getElementById('nbm-zip').value || '').trim().length > 0;
+      document.getElementById('nbm-radius-wrap').style.display = hasZip ? 'none' : '';
+    });
+    // Hide radius by default if user types a ZIP on first load
+    (function() {
+      const hasZip = (document.getElementById('nbm-zip').value || '').trim().length > 0;
+      document.getElementById('nbm-radius-wrap').style.display = hasZip ? 'none' : '';
+    })();
+
+    document.getElementById('btn-nbm-run').addEventListener('click', async () => {
+      const errEl = document.getElementById('nbm-error');
+      const sumEl = document.getElementById('nbm-summary');
+      const legEl = document.getElementById('nbm-legend');
+      const zipCode = (document.getElementById('nbm-zip').value || '').trim();
+      const radiusMiles = parseFloat(document.getElementById('nbm-radius').value) || 20;
+      const minYear = parseInt(document.getElementById('nbm-min-year').value, 10) || 2020;
+      const pageSize = parseInt(document.getElementById('nbm-page-size').value, 10) || 100;
+      const colorBy = document.getElementById('nbm-color-by').value;
+      const colorByLabel = { living_sq_ft: 'Home size (sqft)', lot_sq_ft: 'Lot size (sqft)', ppsf: 'PPSF ($/sqft)' }[colorBy] || colorBy;
+
+      errEl.textContent = '';
+      sumEl.textContent = zipCode ? `Loading ZIP ${zipCode}…` : `Loading LA area (${radiusMiles} mi radius)…`;
+      legEl.style.display = 'none';
+
+      // Build request body — no zip = LA radius search
+      const body = { min_year_built: minYear, page_size: pageSize };
+      if (zipCode) {
+        body.zip_code = zipCode;
+      } else {
+        body.radius_miles = radiusMiles;
+        // latitude/longitude will default to LA center in the backend
+      }
+
+      try {
+        const res = await fetch(API + '/attom/new-build-map', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        if (!res.ok) { errEl.textContent = 'Request failed (' + res.status + ').'; sumEl.textContent = ''; return; }
+        const data = await res.json();
+        if (data.error) { errEl.textContent = data.error; sumEl.textContent = ''; return; }
+
+        const props = data.properties || [];
+        const withColor = props.filter(p => p[colorBy] != null && p.lat != null && p.lon != null);
+
+        if (withColor.length === 0) {
+          sumEl.textContent = `No properties with coordinates and ${colorByLabel} data found in ZIP ${zipCode}.`;
+          legEl.style.display = 'none';
+          return;
+        }
+
+        const colorVals = withColor.map(p => p[colorBy]);
+        const minV = Math.min(...colorVals), maxV = Math.max(...colorVals);
+
+        // Initialise or reuse map
+        if (!newBuildMapInstance) {
+          newBuildMapInstance = L.map('nbm-map').setView([withColor[0].lat, withColor[0].lon], 13);
+          L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { attribution: '&copy; OSM, Carto' }).addTo(newBuildMapInstance);
+        } else {
+          newBuildMapMarkers.forEach(m => newBuildMapInstance.removeLayer(m));
+          newBuildMapMarkers = [];
+          newBuildMapInstance.setView([withColor[0].lat, withColor[0].lon], 13);
+        }
+
+        withColor.forEach(p => {
+          const color = colorForValue(p[colorBy], minV, maxV);
+          const tooltip = [
+            p.address || 'N/A',
+            p.year_built ? `Built ${p.year_built}` : '',
+            p.living_sq_ft ? `Home: ${Math.round(p.living_sq_ft).toLocaleString()} sqft` : '',
+            p.lot_sq_ft ? `Lot: ${Math.round(p.lot_sq_ft).toLocaleString()} sqft` : '',
+            p.lot_width_ft && p.lot_depth_ft ? `Dims: ${Math.round(p.lot_width_ft)}×${Math.round(p.lot_depth_ft)} ft` : '',
+            p.sale_amt ? `Sale: $${Math.round(p.sale_amt).toLocaleString()}` : '',
+            p.ppsf ? `PPSF: $${Math.round(p.ppsf)}` : '',
+          ].filter(Boolean).join('<br>');
+          const marker = L.circleMarker([p.lat, p.lon], {
+            radius: 7, fillColor: color, color: '#222', weight: 1, fillOpacity: 0.85
+          }).bindTooltip(tooltip, { sticky: true });
+          marker.addTo(newBuildMapInstance);
+          newBuildMapMarkers.push(marker);
+        });
+
+        // Fit bounds
+        const lats = withColor.map(p => p.lat), lons = withColor.map(p => p.lon);
+        newBuildMapInstance.fitBounds([[Math.min(...lats), Math.min(...lons)], [Math.max(...lats), Math.max(...lons)]], { padding: [20, 20] });
+
+        sumEl.textContent = `${withColor.length} new-build sale(s) plotted · ${data.area_label || (zipCode ? 'ZIP ' + zipCode : 'LA area')} · year_built ≥ ${minYear}`;
+        legEl.innerHTML = makeLegend(minV, maxV, colorByLabel);
+        legEl.style.display = 'block';
+
+        // Refresh map tiles after panel becomes visible
+        setTimeout(() => newBuildMapInstance.invalidateSize(), 100);
+
+      } catch (e) {
+        errEl.textContent = e.message || 'Request failed';
+        sumEl.textContent = '';
+      }
+    });
+
+    // Re-render map when color-by changes (if data already loaded)
+    document.getElementById('nbm-color-by').addEventListener('change', () => {
+      if (newBuildMapMarkers.length > 0) {
+        document.getElementById('btn-nbm-run').click();
+      }
+    });
+
+    // ── Site search — shared inputs + one Run All button ──────────────────
+    let tssMapInstance = null;
+    let tssMapMarkers = [];
+    let tssLastData = null;
+    let vamLastData = null; // value-accretion API payload; merged into tss for map + baseline table
+    let chartTssWidth = null;
+
+    // Show/hide radius when ZIP is typed
+    document.getElementById('ss-zip').addEventListener('input', () => {
+      const hasZip = (document.getElementById('ss-zip').value || '').trim().length > 0;
+      document.getElementById('ss-radius-wrap').style.display = hasZip ? 'none' : '';
+    });
+
+    function ssReadInputs() {
+      const zip       = (document.getElementById('ss-zip').value || '').trim();
+      const radius    = parseFloat(document.getElementById('ss-radius').value) || 20;
+      const maxYear   = parseInt(document.getElementById('ss-max-year').value, 10) || 1975;
+      const minSqft   = parseInt(document.getElementById('ss-min-sqft').value, 10) || 1100;
+      const maxSqft   = parseInt(document.getElementById('ss-max-sqft').value, 10) || 1700;
+      const targetSqft = parseFloat(document.getElementById('ss-target-sqft').value) || 2700;
+      const pageSize  = parseInt(document.getElementById('ss-page-size').value, 10) || 200;
+      const frontSb   = parseFloat(document.getElementById('ss-front-setback').value) || 20;
+      const rearSb    = parseFloat(document.getElementById('ss-rear-setback').value)  || 20;
+      const sideSb    = parseFloat(document.getElementById('ss-side-setback').value)  || 5;
+      return { zip, radius, maxYear, minSqft, maxSqft, targetSqft, pageSize, frontSb, rearSb, sideSb };
+    }
+
+    function ssBaseBody(p) {
+      const body = {
+        max_year_built: p.maxYear, min_living_sq_ft: p.minSqft, max_living_sq_ft: p.maxSqft,
+        page_size: p.pageSize, front_setback_ft: p.frontSb, rear_setback_ft: p.rearSb, side_setback_ft: p.sideSb,
+      };
+      if (p.zip) body.zip_code = p.zip; else body.radius_miles = p.radius;
+      return body;
+    }
+
+    document.getElementById('btn-ss-run').addEventListener('click', async () => {
+      const btn   = document.getElementById('btn-ss-run');
+      const errEl = document.getElementById('ss-error');
+      errEl.textContent = '';
+      document.getElementById('tss-error').textContent = '';
+      vamLastData = null;
+      document.getElementById('tss-vam-zip-table-wrap').innerHTML = '<p style="color:var(--muted); font-size:0.85rem;">Loading baseline…</p>';
+      document.getElementById('tss-vam-footnote').textContent = '';
+      btn.disabled = true; btn.textContent = 'Running…';
+
+      const p = ssReadInputs();
+
+      // ── Run all three in parallel ──
+      const [tssPromise, pmPromise, vamPromise] = [
+        runTss(p),
+        runPm(p),
+        runVam(p),
+      ];
+      await Promise.allSettled([tssPromise, pmPromise, vamPromise]);
+      btn.disabled = false; btn.textContent = 'Run all';
+    });
+
+    async function runTss(p) {
+      const errEl      = document.getElementById('tss-error');
+      const statusEl   = document.getElementById('tss-status');
+      const resultsWrap = document.getElementById('tss-results-wrap');
+      errEl.textContent = '';
+      statusEl.textContent = 'Loading…';
+      resultsWrap.style.display = '';
+
+      const body = { ...ssBaseBody(p), target_build_sq_ft: p.targetSqft };
+      try {
+        const res = await fetch(API + '/attom/target-sites', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+        if (!res.ok) { errEl.textContent = 'Request failed (' + res.status + ').'; statusEl.textContent = ''; return; }
+        const data = await res.json();
+        if (data.error) { errEl.textContent = data.error; statusEl.textContent = ''; return; }
+        tssLastData = data;
+        renderTssResults(data);
+        statusEl.textContent = (data.total_count || 0).toLocaleString() + ' properties · ' + (data.buildable_count || 0).toLocaleString() + ' buildable';
+        setTimeout(() => { if (tssMapInstance) tssMapInstance.invalidateSize(); }, 150);
+      } catch (e) {
+        errEl.textContent = e.message || 'Request failed';
+        statusEl.textContent = '';
+      }
+    }
+
+    async function runPm(p) {
+      const errEl      = document.getElementById('pm-error');
+      const statusEl   = document.getElementById('pm-status');
+      const resultsWrap = document.getElementById('pm-results-wrap');
+      const btnPmCsv   = document.getElementById('btn-pm-download-csv');
+      errEl.textContent = '';
+      statusEl.textContent = 'Loading…';
+      resultsWrap.style.display = '';
+      btnPmCsv.disabled = true;
+
+      const sizesRaw = document.getElementById('pm-target-sizes').value || '';
+      const targetSizes = sizesRaw.split(',').map(s => parseInt(s.trim(), 10)).filter(n => n > 0 && n < 20000);
+      if (targetSizes.length === 0) {
+        errEl.textContent = 'Enter at least one target size.';
+        statusEl.textContent = '';
+        btnPmCsv.disabled = !pmLastData || !(pmLastData.products || []).length;
+        return;
+      }
+      const benchZip  = (document.getElementById('pm-benchmark-zip').value || '').trim();
+      const compsYear = parseInt(document.getElementById('pm-comps-year').value, 10) || 2020;
+
+      const body = { ...ssBaseBody(p), target_sizes: targetSizes, min_year_built_comps: compsYear };
+      if (benchZip) body.benchmark_zip_code = benchZip;
+      try {
+        const res = await fetch(API + '/attom/product-mix', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+        if (!res.ok) { errEl.textContent = 'Request failed (' + res.status + ').'; statusEl.textContent = ''; btnPmCsv.disabled = !pmLastData || !(pmLastData.products || []).length; return; }
+        const data = await res.json();
+        if (data.error) { errEl.textContent = data.error; statusEl.textContent = ''; btnPmCsv.disabled = !pmLastData || !(pmLastData.products || []).length; return; }
+        renderProductMix(data);
+        const opt = (data.products || []).find(r => r.is_optimal);
+        statusEl.textContent = opt ? '★ Optimal: ' + opt.target_sqft.toLocaleString() + ' sqft' : 'Done';
+      } catch (e) {
+        errEl.textContent = e.message || 'Request failed';
+        statusEl.textContent = '';
+        btnPmCsv.disabled = !pmLastData || !(pmLastData.products || []).length;
+      }
+    }
+
+    function mergeVamIntoTss(tssData, vamData) {
+      if (!tssData || !vamData || !vamData.properties) return;
+      tssData.zip_benchmarks = vamData.zip_benchmarks;
+      const tp = tssData.properties || [];
+      const vp = vamData.properties || [];
+      const n = Math.min(tp.length, vp.length);
+      const keys = ['value_accretion', 'new_build_value', 'local_ppsf', 'existing_value', 'existing_value_source'];
+      for (let i = 0; i < n; i++) {
+        const v = vp[i];
+        keys.forEach(k => { if (v[k] !== undefined) tp[i][k] = v[k]; });
+      }
+    }
+
+    function renderVamZipTable(data) {
+      const fmt$ = v => v != null ? '$' + Math.round(v).toLocaleString() : '—';
+      const fmt1 = v => v != null ? Number(v).toLocaleString(undefined, { maximumFractionDigits: 0 }) : '—';
+      const zips = data.zip_benchmarks || [];
+      const thS = 'padding:0.35rem 0.6rem; text-align:right; border-bottom:2px solid var(--border); white-space:nowrap;';
+      const tdS = 'padding:0.3rem 0.6rem; text-align:right; border-bottom:1px solid var(--border);';
+      let tableHtml = `<table style="width:100%; font-size:0.83rem; border-collapse:collapse;">
+        <thead><tr>
+          <th style="${thS} text-align:left;">ZIP</th>
+          <th style="${thS}">Properties</th>
+          <th style="${thS}">PPSF p25</th>
+          <th style="${thS}">PPSF median</th>
+          <th style="${thS}">PPSF p75</th>
+          <th style="${thS}">New-build value (${fmt1(data.target_build_sq_ft)} sqft)</th>
+          <th style="${thS}">New-build comps</th>
+          <th style="${thS}">Signal</th>
+        </tr></thead><tbody>`;
+      zips.forEach(z => {
+        const signal = z.has_new_builds
+          ? '<span style="color:#16a34a;">✓ present</span>'
+          : '<span style="color:#dc2626;">⚠ none</span>';
+        tableHtml += `<tr>
+          <td style="${tdS} text-align:left; font-weight:600;">${escapeHtml(z.zip_code)}</td>
+          <td style="${tdS}">${z.property_count}</td>
+          <td style="${tdS}">${fmt$(z.p25_ppsf)}</td>
+          <td style="${tdS}; font-weight:600;">${fmt$(z.median_ppsf)}</td>
+          <td style="${tdS}">${fmt$(z.p75_ppsf)}</td>
+          <td style="${tdS}; font-weight:600;">${fmt$(z.new_build_value)}</td>
+          <td style="${tdS}">${z.sale_count}</td>
+          <td style="${tdS}">${signal}</td>
+        </tr>`;
+      });
+      tableHtml += '</tbody></table>';
+      document.getElementById('tss-vam-zip-table-wrap').innerHTML = zips.length ? tableHtml : '<p style="color:var(--muted); font-size:0.85rem;">No new-build comps found for any ZIP in this area.</p>';
+    }
+
+    function renderVamFootnote(data) {
+      const hasAcc = (data.properties || []).some(p => p.value_accretion != null);
+      const f = data.filters || {};
+      const sb = f.assumed_setbacks || {};
+      document.getElementById('tss-vam-footnote').innerHTML =
+        `${data.total_count} properties scanned · ${data.target_build_sq_ft} sqft target · ` +
+        (hasAcc ? '' : '⚠ No existing value data — accretion requires AVM or last-sale. ') +
+        `Setbacks: front ${sb.front_setback_ft ?? 20} ft · rear ${sb.rear_setback_ft ?? 20} ft · sides ${sb.side_setback_ft ?? 5} ft · ` +
+        `Area: ${escapeHtml(data.area_label || '')}`;
+    }
+
+    async function runVam(p) {
+      const errEl = document.getElementById('tss-error');
+      errEl.textContent = '';
+
+      const body = { ...ssBaseBody(p), target_build_sq_ft: p.targetSqft };
+      try {
+        const res = await fetch(API + '/attom/value-accretion-map', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+        if (!res.ok) { errEl.textContent = (errEl.textContent ? errEl.textContent + ' ' : '') + 'Value baseline failed (' + res.status + ').'; return; }
+        const data = await res.json();
+        if (data.error) { errEl.textContent = (errEl.textContent ? errEl.textContent + ' ' : '') + data.error; return; }
+        vamLastData = data;
+        renderVamZipTable(data);
+        renderVamFootnote(data);
+        if (tssLastData) {
+          mergeVamIntoTss(tssLastData, vamLastData);
+          const statusEl = document.getElementById('tss-status');
+          if (statusEl && statusEl.textContent && !statusEl.textContent.includes('PPSF baseline')) {
+            statusEl.textContent += ' · PPSF baseline';
+          }
+          renderTssMap(tssLastData);
+        }
+        setTimeout(() => { if (tssMapInstance) tssMapInstance.invalidateSize(); }, 150);
+      } catch (e) {
+        errEl.textContent = (errEl.textContent ? errEl.textContent + ' ' : '') + (e.message || 'Value baseline request failed');
+      }
+    }
+
+    document.getElementById('tss-color-by').addEventListener('change', () => { if (tssLastData) renderTssMap(tssLastData); });
+    document.getElementById('tss-buildable-only').addEventListener('change', () => { if (tssLastData) renderTssMap(tssLastData); });
+
+    function renderTssResults(data) {
+      // Summary stats
+      document.getElementById('tss-stat-total').textContent = (data.total_count || 0).toLocaleString();
+      document.getElementById('tss-stat-buildable').textContent = (data.buildable_count || 0).toLocaleString();
+      document.getElementById('tss-stat-buildable-label').textContent =
+        `Buildable lots (fit ${(data.filters || {}).target_build_sq_ft || 2700} sqft)`;
+      document.getElementById('tss-stat-pct').textContent =
+        data.buildable_pct != null ? data.buildable_pct.toFixed(1) + '%' : '—';
+      const fmt1 = v => v != null ? Number(v).toLocaleString(undefined, { maximumFractionDigits: 0 }) : '—';
+      document.getElementById('tss-stat-width').textContent =
+        `${fmt1(data.lot_width_p25)} / ${fmt1(data.lot_width_median)} / ${fmt1(data.lot_width_p75)}`;
+      document.getElementById('tss-stat-depth').textContent =
+        `${fmt1(data.lot_depth_p25)} / ${fmt1(data.lot_depth_median)} / ${fmt1(data.lot_depth_p75)}`;
+
+      // Lot-width distribution chart
+      const dist = data.lot_width_distribution || [];
+      if (chartTssWidth) { chartTssWidth.destroy(); chartTssWidth = null; }
+      if (dist.length > 0) {
+        chartTssWidth = new Chart(document.getElementById('chart-tss-width'), {
+          type: 'bar',
+          data: {
+            labels: dist.map(d => d.bucket),
+            datasets: [
+              { label: 'Fits target', data: dist.map(d => d.buildable_count), backgroundColor: 'rgba(22,163,74,0.75)' },
+              { label: 'Does not fit', data: dist.map(d => d.count - d.buildable_count), backgroundColor: 'rgba(120,120,140,0.55)' },
+            ],
+          },
+          options: {
+            responsive: true, maintainAspectRatio: false,
+            plugins: { legend: { display: true, position: 'top' } },
+            scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true, title: { display: true, text: 'Properties' } } },
+          },
+        });
+      }
+
+      // Assumptions block
+      const f = data.filters || {};
+      const sb = f.assumed_setbacks || {};
+      document.getElementById('tss-assumptions').innerHTML =
+        `<strong>Filters applied:</strong> year_built ≤ ${f.max_year_built || '—'} · living sqft ${f.min_living_sq_ft || '—'}–${f.max_living_sq_ft || '—'} · target build ${f.target_build_sq_ft || '—'} sqft ·
+        <strong>Assumed setbacks:</strong> front ${sb.front_setback_ft || 20} ft · rear ${sb.rear_setback_ft || 20} ft · sides ${sb.side_setback_ft || 5} ft ·
+        <em>Area: ${escapeHtml(data.area_label || '')}</em>`;
+
+      if (vamLastData) {
+        mergeVamIntoTss(data, vamLastData);
+        renderVamZipTable(data);
+        renderVamFootnote(data);
+      } else {
+        document.getElementById('tss-vam-zip-table-wrap').innerHTML = '<p style="color:var(--muted); font-size:0.85rem;">Loading baseline…</p>';
+        document.getElementById('tss-vam-footnote').textContent = '';
+      }
+
+      renderTssMap(data);
+    }
+
+    function renderTssMap(data) {
+      const colorBy = document.getElementById('tss-color-by').value;
+      const buildableOnly = document.getElementById('tss-buildable-only').checked;
+      const colorByLabel = {
+        buildable_sq_ft: 'Buildable sqft',
+        lot_sq_ft: 'Lot size (sqft)',
+        living_sq_ft: 'Home size (sqft)',
+        value_accretion: 'Value accretion ($)',
+      }[colorBy] || colorBy;
+
+      let props = (data.properties || []).filter(p => p.lat != null && p.lon != null);
+      if (buildableOnly) props = props.filter(p => p.fits_target);
+      const withVal = props.filter(p => p[colorBy] != null);
+
+      if (withVal.length === 0) {
+        let msg = 'No properties with coordinates' + (buildableOnly ? ' and buildable' : '') + ' to display';
+        if (colorBy === 'value_accretion') {
+          msg += ' with ' + colorByLabel + '. Finish Run all (baseline) or choose another color.';
+        } else {
+          msg += '.';
+        }
+        document.getElementById('tss-map-legend').textContent = msg;
+        return;
+      }
+
+      const colorVals = withVal.map(p => p[colorBy]);
+      const minV = Math.min(...colorVals), maxV = Math.max(...colorVals);
+
+      if (!tssMapInstance) {
+        tssMapInstance = L.map('tss-map').setView([withVal[0].lat, withVal[0].lon], 13);
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { attribution: '&copy; OSM, Carto' }).addTo(tssMapInstance);
+      } else {
+        tssMapMarkers.forEach(m => tssMapInstance.removeLayer(m));
+        tssMapMarkers = [];
+      }
+
+      const fmt$ = v => v != null ? '$' + Math.round(v).toLocaleString() : '—';
+      withVal.forEach(p => {
+        const c = colorForValue(p[colorBy], minV, maxV);
+        const borderColor = p.fits_target ? '#16a34a' : '#666';
+        const borderW = p.fits_target ? 2 : 1;
+        const tooltip = [
+          p.address || 'N/A',
+          p.zip_code ? `ZIP: ${p.zip_code}` : '',
+          p.year_built ? `Built ${p.year_built}` : '',
+          p.living_sq_ft ? `Home: ${Math.round(p.living_sq_ft).toLocaleString()} sqft` : '',
+          p.lot_width_ft != null ? `Lot width: ${Math.round(p.lot_width_ft)} ft` : '',
+          p.lot_depth_ft != null ? `Lot depth: ${Math.round(p.lot_depth_ft)} ft` : '',
+          p.lot_sq_ft ? `Lot: ${Math.round(p.lot_sq_ft).toLocaleString()} sqft` : '',
+          p.buildable_sq_ft ? `Buildable: ${Math.round(p.buildable_sq_ft).toLocaleString()} sqft` : '',
+          p.existing_value ? `Existing value: ${fmt$(p.existing_value)}${p.existing_value_source ? ' (' + p.existing_value_source + ')' : ''}` : '',
+          p.local_ppsf ? `ZIP PPSF: $${Math.round(p.local_ppsf)}/sqft` : '',
+          p.new_build_value ? `New-build value: ${fmt$(p.new_build_value)}` : '',
+          p.value_accretion != null ? `<strong>Accretion: ${fmt$(p.value_accretion)}</strong>` : '',
+          p.fits_target ? '✓ Fits target' : '✗ Does not fit',
+          p.buildable_notes ? `Note: ${p.buildable_notes}` : '',
+        ].filter(Boolean).join('<br>');
+        const marker = L.circleMarker([p.lat, p.lon], { radius: 7, fillColor: c, color: borderColor, weight: borderW, fillOpacity: 0.82 }).bindTooltip(tooltip, { sticky: true });
+        marker.addTo(tssMapInstance);
+        tssMapMarkers.push(marker);
+      });
+
+      const lats = withVal.map(p => p.lat), lons = withVal.map(p => p.lon);
+      tssMapInstance.fitBounds([[Math.min(...lats), Math.min(...lons)], [Math.max(...lats), Math.max(...lons)]], { padding: [20, 20] });
+
+      document.getElementById('tss-map-legend').innerHTML = makeLegend(minV, maxV, colorByLabel);
+    }
+
+    // ── Product mix optimizer ─────────────────────────────────────────────────
+    let chartPm = null;
+    let pmLastData = null;
+
+    function escapeCsvCell(val) {
+      if (val === null || val === undefined) return '';
+      const s = String(val);
+      if (/[",\n\r]/.test(s)) return '"' + s.replace(/"/g, '""') + '"';
+      return s;
+    }
+
+    function productMixToCsv(data) {
+      const nb = data.new_build_benchmark || {};
+      const f = data.filters || {};
+      const sb = f.assumed_setbacks || {};
+      const metaLines = [
+        '# product_mix_export',
+        '# area_label,' + escapeCsvCell(data.area_label || ''),
+        '# total_scanned,' + escapeCsvCell(data.total_scanned),
+        '# filter_max_year_built,' + escapeCsvCell(f.max_year_built),
+        '# filter_living_sqft_range,' + escapeCsvCell(f.min_living_sq_ft) + '-' + escapeCsvCell(f.max_living_sq_ft),
+        '# filter_setbacks_ft,' + escapeCsvCell('front ' + (sb.front_setback_ft ?? 20) + ' rear ' + (sb.rear_setback_ft ?? 20) + ' side ' + (sb.side_setback_ft ?? 5)),
+        '# new_build_median_ppsf,' + escapeCsvCell(nb.median_ppsf),
+        '# new_build_p25_ppsf,' + escapeCsvCell(nb.p25_ppsf),
+        '# new_build_p75_ppsf,' + escapeCsvCell(nb.p75_ppsf),
+        '# new_build_sale_count,' + escapeCsvCell(nb.sale_count),
+        '# new_build_has_signal,' + escapeCsvCell(nb.has_new_builds),
+        '# existing_value_sources,' + escapeCsvCell((data.existing_value_sources || []).join(';')),
+      ];
+      const headers = [
+        'target_sqft', 'buildable_count', 'buildable_pct', 'new_build_value',
+        'avg_existing_value', 'existing_value_coverage', 'avg_value_accretion',
+        'total_value_created', 'is_optimal',
+      ];
+      const products = data.products || [];
+      const body = [headers.join(',')].concat(
+        products.map(r => headers.map(h => escapeCsvCell(r[h])).join(',')),
+      );
+      return '\uFEFF' + metaLines.join('\n') + '\n' + body.join('\n') + '\n';
+    }
+
+    function downloadProductMixCsv() {
+      if (!pmLastData || !(pmLastData.products || []).length) return;
+      const csv = productMixToCsv(pmLastData);
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+      const a = document.createElement('a');
+      const stamp = new Date().toISOString().slice(0, 19).replace(/[:-]/g, '');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'product-mix-comparison-' + stamp + '.csv';
+      a.click();
+      URL.revokeObjectURL(a.href);
+    }
+
+    document.getElementById('btn-pm-download-csv').addEventListener('click', downloadProductMixCsv);
+
+    function renderProductMix(data) {
+      const fmt$ = v => v != null ? '$' + Math.round(v).toLocaleString() : '—';
+      const fmtM = v => v != null ? '$' + (v / 1e6).toFixed(2) + 'M' : '—';
+      const fmtPct = v => v != null ? v.toFixed(1) + '%' : '—';
+
+      // Benchmark strip
+      const nb = data.new_build_benchmark || {};
+      const hasPpsf = nb.median_ppsf != null;
+      const signalBadge = nb.has_new_builds
+        ? '<span style="background:#16a34a;color:#fff;padding:0.1rem 0.5rem;border-radius:10px;font-size:0.78rem;">✓ New builds present</span>'
+        : '<span style="background:#dc2626;color:#fff;padding:0.1rem 0.5rem;border-radius:10px;font-size:0.78rem;">⚠ No new builds</span>';
+      document.getElementById('pm-benchmark-strip').innerHTML =
+        `${signalBadge} &nbsp;New-build benchmark (year_built ≥ ${data.filters?.assumed_setbacks ? '' : ''}${nb.sale_count || 0} comps): ` +
+        `p25 ${fmt$(nb.p25_ppsf)}/sqft · <strong>median ${fmt$(nb.median_ppsf)}/sqft</strong> · p75 ${fmt$(nb.p75_ppsf)}/sqft &nbsp;·&nbsp; ` +
+        `<em style="color:var(--muted);">Area: ${escapeHtml(data.area_label || '')} · ${data.total_scanned} properties scanned</em>`;
+
+      // Comparison table
+      const products = data.products || [];
+      const thStyle = 'padding:0.4rem 0.6rem; text-align:right; border-bottom:2px solid var(--border); white-space:nowrap;';
+      const tdStyle = (opt) => `padding:0.35rem 0.6rem; text-align:right; border-bottom:1px solid var(--border);${opt ? ' background:rgba(250,204,21,0.12); font-weight:600;' : ''}`;
+      // Only show "Avg existing value" column if at least one row has data
+      const showExistingVal = products.some(r => r.avg_existing_value != null);
+      const baseHeaders = ['Target sqft','Buildable lots','% buildable','New-build value'];
+      const extraHeaders = showExistingVal ? ['Avg existing value'] : [];
+      const headers = [...baseHeaders, ...extraHeaders, 'Avg value accretion','Total value created'];
+      let tableHtml = '<thead><tr>' + headers.map(h => `<th style="${thStyle}">${h}</th>`).join('') + '</tr></thead><tbody>';
+      products.forEach(r => {
+        const opt = r.is_optimal;
+        const td = tdStyle(opt);
+        const existingValCell = showExistingVal
+          ? `<td style="${td}">${r.avg_existing_value != null ? fmt$(r.avg_existing_value) + ' <small style=\'color:var(--muted)\'>(' + r.existing_value_coverage + ')</small>' : '—'}</td>`
+          : '';
+        tableHtml += `<tr>
+          <td style="${td}">${opt ? '★ ' : ''}${r.target_sqft.toLocaleString()} sqft</td>
+          <td style="${td}">${r.buildable_count.toLocaleString()}</td>
+          <td style="${td}">${fmtPct(r.buildable_pct)}</td>
+          <td style="${td}">${fmt$(r.new_build_value)}</td>
+          ${existingValCell}
+          <td style="${td}">${fmt$(r.avg_value_accretion)}</td>
+          <td style="${td}">${fmtM(r.total_value_created)}</td>
+        </tr>`;
+      });
+      tableHtml += '</tbody>';
+      document.getElementById('pm-table').innerHTML = tableHtml;
+
+      pmLastData = data;
+      document.getElementById('btn-pm-download-csv').disabled = !(data.products || []).length;
+
+      // Dual-axis chart
+      if (chartPm) { chartPm.destroy(); chartPm = null; }
+      const labels = products.map(r => (r.is_optimal ? '★ ' : '') + r.target_sqft.toLocaleString() + ' sqft');
+      const counts = products.map(r => r.buildable_count);
+      const accretions = products.map(r => r.avg_value_accretion);
+      const totalValues = products.map(r => r.total_value_created != null ? r.total_value_created / 1e6 : null);
+
+      chartPm = new Chart(document.getElementById('chart-pm'), {
+        data: {
+          labels,
+          datasets: [
+            {
+              type: 'bar',
+              label: 'Buildable lots (count)',
+              data: counts,
+              backgroundColor: products.map(r => r.is_optimal ? 'rgba(250,204,21,0.8)' : 'rgba(88,166,255,0.6)'),
+              yAxisID: 'y',
+              order: 2,
+            },
+            {
+              type: 'line',
+              label: 'Avg value accretion ($)',
+              data: accretions,
+              borderColor: '#f97316',
+              backgroundColor: 'rgba(249,115,22,0.15)',
+              tension: 0.35,
+              yAxisID: 'y2',
+              order: 1,
+              pointRadius: 5,
+              pointHoverRadius: 7,
+            },
+            {
+              type: 'line',
+              label: 'Total value created ($M)',
+              data: totalValues,
+              borderColor: '#16a34a',
+              backgroundColor: 'rgba(22,163,74,0.1)',
+              borderDash: [5, 3],
+              tension: 0.35,
+              yAxisID: 'y3',
+              order: 0,
+              pointRadius: 5,
+              pointHoverRadius: 7,
+            },
+          ],
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          plugins: { legend: { display: true, position: 'top' } },
+          scales: {
+            y:  { type: 'linear', position: 'left',  beginAtZero: true, title: { display: true, text: 'Buildable lots' } },
+            y2: { type: 'linear', position: 'right', beginAtZero: true, title: { display: true, text: 'Avg accretion ($)' },
+                  grid: { drawOnChartArea: false } },
+            y3: { type: 'linear', position: 'right', beginAtZero: true, title: { display: true, text: 'Total value ($M)' },
+                  grid: { drawOnChartArea: false }, display: totalValues.some(v => v != null) },
+          },
+        },
+      });
+
+      // Footer notes
+      const hasExistingValue = products.some(r => r.existing_value_coverage > 0);
+      const evSources = (data.existing_value_sources || []);
+      const evSourceLabel = evSources.length
+        ? 'Existing value source: ' + evSources.map(s => ({ bulk_avm: 'Attom bulk AVM', last_sale: 'last sale price', snapshot_avm: 'snapshot AVM' }[s] || s)).join(' + ') + '. '
+        : '';
+      document.getElementById('pm-footer').innerHTML =
+        (hasExistingValue ? evSourceLabel : '⚠ No existing value data returned — value accretion columns empty. A ZIP code is required for bulk AVM lookup. ') +
+        (!hasPpsf ? '⚠ No new-build PPSF available — enter a ZIP for the PPSF benchmark. ' : '') +
+        `Setbacks assumed: front ${data.filters?.assumed_setbacks?.front_setback_ft ?? 20} ft · rear ${data.filters?.assumed_setbacks?.rear_setback_ft ?? 20} ft · sides ${data.filters?.assumed_setbacks?.side_setback_ft ?? 5} ft.`;
+    }
+
+    let chartCompsHistogram = null, chartZipYearBar = null, chartZipTrend = null, chartCityPpsf = null, chartCityVolume = null, chartZipMonth = null, chartSubmarketsBar = null;
+    let chartRegionHomesizeBar = null, chartRegionLotsizeBar = null;
+    let chartRebuildEvalLotsize = null, chartRebuildEvalHomesize = null;
     let mapInstance = null;
+    const SUBMARKET_CITIES = ['LOS ANGELES', 'BURBANK', 'GLENDALE', 'PASADENA', 'SANTA MONICA', 'LONG BEACH', 'INGLEWOOD', 'CULVER CITY', 'WEST HOLLYWOOD', 'SAN FERNANDO'];
 
     // Load property info from mls_history (property-info)
     document.getElementById('btn-load-property').addEventListener('click', async () => {
@@ -195,6 +1850,9 @@
       errEl.textContent = '';
       infoEl.textContent = '';
       document.getElementById('property-footprint').textContent = '';
+      document.getElementById('property-zoning').textContent = '';
+      document.getElementById('property-nearby-zoning').textContent = '';
+      if (window.chartNearbyZoning) { window.chartNearbyZoning.destroy(); window.chartNearbyZoning = null; }
       const pid = document.getElementById('property-id').value?.trim();
       if (!pid) {
         errEl.textContent = 'Enter Property ID.';
@@ -239,6 +1897,59 @@
           } else {
             fpEl.textContent = (fp.notes || 'Lot dimensions unavailable.') + (fp.width_source || fp.depth_source ? ' (sources: ' + [fp.width_source, fp.depth_source].filter(Boolean).join(', ') + ')' : '');
           }
+        }
+        // Zoning summary ("what you can build")
+        try {
+          const zoningRows = await apiPost('/queries/zoning-summary', { parcel_id: property_id });
+          const z = zoningRows[0];
+          const zoningEl = document.getElementById('property-zoning');
+          if (z) {
+            const parts = [];
+            if (z.zone_code) parts.push('Zone ' + z.zone_code);
+            if (z.max_gfa_estimate != null) parts.push('Max GFA ~' + Math.round(Number(z.max_gfa_estimate)).toLocaleString() + ' sq ft');
+            if (z.max_height_ft != null) parts.push('max height ' + Math.round(Number(z.max_height_ft)) + ' ft');
+            if (z.min_parking_spaces != null) parts.push(z.min_parking_spaces + ' parking min');
+            if (z.max_units != null) parts.push('up to ' + z.max_units + ' unit(s)');
+            zoningEl.textContent = parts.length ? parts.join('. ') : 'No zoning constraints in lookup.';
+          } else {
+            zoningEl.textContent = 'No zoning data for this parcel.';
+          }
+        } catch (_) {
+          document.getElementById('property-zoning').textContent = 'Zoning unavailable.';
+        }
+        // Nearby zoning (subject + same-ZIP parcels, zone distribution)
+        try {
+          const nearbyRows = await apiPost('/queries/nearby-zoning', { parcel_id: property_id, limit: 50 });
+          const subjectRow = nearbyRows.find(r => r.is_subject);
+          const nearbyEl = document.getElementById('property-nearby-zoning');
+          if (subjectRow && subjectRow.zone_code) {
+            nearbyEl.textContent = 'Subject: ' + subjectRow.zone_code + '. Nearby parcels (same ZIP): ' + (nearbyRows.length - 1) + ' shown.';
+          } else if (nearbyRows.length > 0) {
+            nearbyEl.textContent = 'Nearby parcels (same ZIP): ' + nearbyRows.length + ' shown.';
+          } else {
+            nearbyEl.textContent = '';
+          }
+          const zoneCounts = {};
+          nearbyRows.forEach(r => {
+            const code = r.zone_code || '(no zone)';
+            zoneCounts[code] = (zoneCounts[code] || 0) + 1;
+          });
+          const labels = Object.keys(zoneCounts).sort();
+          const counts = labels.map(l => zoneCounts[l]);
+          if (labels.length > 0 && window.Chart) {
+            if (window.chartNearbyZoning) window.chartNearbyZoning.destroy();
+            window.chartNearbyZoning = new Chart(document.getElementById('chart-nearby-zoning'), {
+              type: 'bar',
+              data: { labels, datasets: [{ label: 'Parcels', data: counts, backgroundColor: 'rgba(88, 166, 255, 0.6)' }] },
+              options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } } }
+            });
+            document.getElementById('nearby-zoning-chart-wrap').style.display = 'block';
+          } else {
+            document.getElementById('nearby-zoning-chart-wrap').style.display = 'none';
+          }
+        } catch (_) {
+          document.getElementById('property-nearby-zoning').textContent = 'Nearby zoning unavailable.';
+          document.getElementById('nearby-zoning-chart-wrap').style.display = 'none';
         }
       } catch (e) {
         infoEl.textContent = '';
@@ -444,7 +2155,7 @@
       return { labels, counts };
     }
 
-    // 1) F1 Comps
+    // 1) Comps by ZIP
     document.getElementById('btn-comps').addEventListener('click', async () => {
       const zip = document.getElementById('comps-zip').value?.trim();
       const year = parseInt(document.getElementById('comps-year').value, 10);
@@ -483,14 +2194,17 @@
       const outEl = document.getElementById('comps-lot-buckets');
       outEl.textContent = '';
       if (!zip) { outEl.textContent = 'Enter a ZIP first.'; return; }
+      const bucketInput = document.getElementById('lot-bucket-size');
+      let bucketSize = parseInt(bucketInput?.value, 10);
+      if (isNaN(bucketSize) || bucketSize <= 0) bucketSize = 5;
       try {
-        const rows = await apiPost('/queries/lot-size-buckets', { zip_codes: [zip], bucket_size_ft: 5 });
+        const rows = await apiPost('/queries/lot-size-buckets', { zip_codes: [zip], bucket_size_ft: bucketSize });
         if (!rows.length) {
           outEl.textContent = 'No lot footprint data for ZIP ' + zip + '.';
           return;
         }
         const top = rows.sort((a, b) => (b.lot_count || 0) - (a.lot_count || 0)).slice(0, 15);
-        outEl.innerHTML = 'Lot footprint (width×depth 5 ft buckets), top 15: <table class="mini-table"><thead><tr><th>Width (ft)</th><th>Depth (ft)</th><th>Lots</th></tr></thead><tbody>' +
+        outEl.innerHTML = 'Lot footprint (width×depth ' + bucketSize + ' ft buckets), top 15: <table class="mini-table"><thead><tr><th>Width (ft)</th><th>Depth (ft)</th><th>Lots</th></tr></thead><tbody>' +
           top.map(r => '<tr><td>' + r.width_bucket + '</td><td>' + r.depth_bucket + '</td><td>' + (r.lot_count || 0) + '</td></tr>').join('') + '</tbody></table>';
       } catch (e) {
         outEl.textContent = e.message || 'Request failed.';
@@ -621,9 +2335,12 @@
       const errEl = document.getElementById('map-error');
       errEl.textContent = '';
       try {
-        const rows = await apiPost('/queries/ppsf-map', { geography: 'grid', sale_year: year, limit: 500 });
+        const rows = await apiPost('/queries/ppsf-map', { geography: 'grid', sale_year: year, limit: 500, city_name: getSelectedCity() });
         const withCoords = rows.filter(r => r.centroid_lat != null && r.centroid_lon != null);
-        if (withCoords.length === 0) { errEl.textContent = 'No grid points with coordinates. Ensure analytics schema and grid are built.'; return; }
+        if (withCoords.length === 0) {
+          errEl.textContent = 'No grid points for this city and year. Map uses read-only data (sales + property_geometry.center_point). Check that the selected city has sales and parcel coordinates.';
+          return;
+        }
         const ppsfs = withCoords.map(r => r.median_ppsf).filter(x => typeof x === 'number');
         const minP = Math.min(...ppsfs), maxP = Math.max(...ppsfs);
         if (!mapInstance) {
@@ -641,6 +2358,1212 @@
         });
       } catch (e) {
         errEl.textContent = e.message || 'Request failed.';
+      }
+    });
+
+    // 6) Submarkets – PPSF comparison by city (one year)
+    document.getElementById('btn-submarkets').addEventListener('click', async () => {
+      const errEl = document.getElementById('submarkets-error');
+      const sumEl = document.getElementById('submarkets-summary');
+      const tableWrap = document.getElementById('submarkets-table-wrap');
+      errEl.textContent = '';
+      sumEl.textContent = '';
+      tableWrap.innerHTML = '';
+      const year = parseInt(document.getElementById('submarkets-year').value, 10);
+      const btn = document.getElementById('btn-submarkets');
+      btn.disabled = true;
+      sumEl.textContent = 'Loading city×year for all submarkets…';
+      try {
+        const allRows = [];
+        for (const city of SUBMARKET_CITIES) {
+          const rows = await apiPost('/queries/volume-by-city-year', { min_sold_date: '2020-01-01', city_name: city });
+          if (rows && rows.length) allRows.push(...rows);
+        }
+        const byYear = allRows.filter(r => Number(r.sale_year) === year).sort((a, b) => (b.median_ppsf || 0) - (a.median_ppsf || 0));
+        if (byYear.length === 0) {
+          sumEl.textContent = 'No data for year ' + year + '. Try another year.';
+          if (chartSubmarketsBar) { chartSubmarketsBar.destroy(); chartSubmarketsBar = null; }
+          return;
+        }
+        sumEl.textContent = 'Submarkets (year ' + year + '): ' + byYear.length + ' cities.';
+        tableWrap.innerHTML = '<table><thead><tr><th>City</th><th>Median PPSF</th><th>Total sales</th></tr></thead><tbody>' +
+          byYear.map(r => '<tr><td>' + (r.city_name || '') + '</td><td>' + (r.median_ppsf != null ? '$' + Math.round(Number(r.median_ppsf)).toLocaleString() : '—') + '</td><td>' + (r.total_sales != null ? r.total_sales : '—') + '</td></tr>').join('') + '</tbody></table>';
+        if (chartSubmarketsBar) chartSubmarketsBar.destroy();
+        chartSubmarketsBar = new Chart(document.getElementById('chart-submarkets-bar'), {
+          type: 'bar',
+          data: {
+            labels: byYear.map(r => r.city_name || ''),
+            datasets: [{ label: 'Median PPSF ($/sf)', data: byYear.map(r => r.median_ppsf != null ? Number(r.median_ppsf) : null), backgroundColor: 'rgba(88, 166, 255, 0.6)' }]
+          },
+          options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { beginAtZero: true } } }
+        });
+      } catch (e) {
+        errEl.textContent = e.message || 'Request failed.';
+        if (chartSubmarketsBar) { chartSubmarketsBar.destroy(); chartSubmarketsBar = null; }
+      } finally {
+        btn.disabled = false;
+      }
+    });
+
+    // Region panel: build size recommendation + feature set
+    document.getElementById('btn-region-recommend').addEventListener('click', async () => {
+      if (!currentRegion) {
+        document.getElementById('region-recommend-result').textContent = 'Enter an address (Property ID or ZIP) above and click Show features.';
+        document.getElementById('region-recommend-features').innerHTML = '';
+        return;
+      }
+      const errEl = document.getElementById('region-recommend-error');
+      const resultEl = document.getElementById('region-recommend-result');
+      const featuresEl = document.getElementById('region-recommend-features');
+      errEl.textContent = '';
+      resultEl.textContent = 'Loading…';
+      featuresEl.innerHTML = '';
+      try {
+        if (currentRegion.property_id != null) {
+          const pid = currentRegion.property_id;
+          const [infoRows, fpRows, zonRows] = await Promise.all([
+            apiPost('/queries/property-info', { property_id: pid }),
+            apiPost('/queries/parcel-footprint', { property_id: pid }),
+            apiPost('/queries/zoning-summary', { parcel_id: pid })
+          ]);
+          const info = infoRows[0];
+          const fp = fpRows[0];
+          const zon = zonRows[0];
+          const maxGfa = zon && zon.max_gfa_estimate != null ? Math.round(Number(zon.max_gfa_estimate)) : null;
+          const lotW = (fp && fp.lot_width_ft != null) ? Math.round(Number(fp.lot_width_ft)) : null;
+          const lotD = (fp && fp.lot_depth_ft != null) ? Math.round(Number(fp.lot_depth_ft)) : null;
+          const subjectSqft = (info && info.living_sq_ft != null) ? Number(info.living_sq_ft) : null;
+          const trySqft = (subjectSqft && subjectSqft >= 1200 && subjectSqft <= 5000) ? Math.round(subjectSqft) : 2500;
+          const targetSqft = maxGfa != null && trySqft > maxGfa ? maxGfa : trySqft;
+          const feas = await apiPost('/decisions/feasibility', {
+            property_id: pid,
+            target_sqft: targetSqft,
+            product_type: 'SINGLE FAMILY RESIDENCE'
+          });
+          const low = feas.recommended_size_band_low != null ? Math.round(feas.recommended_size_band_low) : null;
+          const high = feas.recommended_size_band_high != null ? Math.round(feas.recommended_size_band_high) : null;
+          if (feas.pass_fail && low != null && high != null) {
+            resultEl.innerHTML = 'Recommended build size: <strong>' + low + '–' + high + ' sq ft</strong>. Fits lot and zoning; comps support this band.';
+          } else if (feas.reason_messages && feas.reason_messages.length) {
+            resultEl.innerHTML = 'Constraints limit build size. Suggested range: ' + (maxGfa != null ? 'up to <strong>' + maxGfa + ' sq ft</strong> (zoning max)' : (low && high ? low + '–' + high + ' sq ft' : 'see features below')) + '.';
+          } else if (maxGfa != null) {
+            resultEl.innerHTML = 'Recommended: build up to <strong>' + maxGfa + ' sq ft</strong> (zoning max). Check feasibility for a specific size.';
+          } else {
+            resultEl.textContent = 'Use the feasibility check below with a target size; recommendation depends on lot and comps.';
+          }
+          const feat = [];
+          if (zon && zon.zone_code) feat.push('<strong>Zoning</strong> ' + zon.zone_code + (maxGfa != null ? ', max GFA ~' + maxGfa + ' sq ft' : ''));
+          if (lotW != null && lotD != null) feat.push('<strong>Lot</strong> ' + lotW + '×' + lotD + ' ft (width × depth)');
+          if (fp && fp.ratio_band) feat.push('<strong>Footprint band</strong> ' + fp.ratio_band);
+          if (feas.comp_count != null) feat.push('<strong>Comps in band</strong> ' + feas.comp_count + (feas.confidence_band ? ', confidence ' + feas.confidence_band : ''));
+          if (feas.expected_p50_price != null) feat.push('<strong>Expected value (p50)</strong> ~$' + Math.round(feas.expected_p50_price).toLocaleString());
+          if (feas.expected_p25_price != null && feas.expected_p75_price != null) feat.push('<strong>Price range (p25–p75)</strong> $' + Math.round(feas.expected_p25_price).toLocaleString() + '–$' + Math.round(feas.expected_p75_price).toLocaleString());
+          if (feas.expected_median_dom != null) feat.push('<strong>Median DOM</strong> ' + Math.round(feas.expected_median_dom) + ' days');
+          if (feas.reason_messages && feas.reason_messages.length) feat.push('<strong>Constraints</strong> ' + feas.reason_messages.join('; '));
+          featuresEl.innerHTML = '<p style="margin: 0 0 0.25rem;">Feature set:</p><ul style="margin: 0; padding-left: 1.25rem;">' + feat.map(f => '<li>' + f + '</li>').join('') + '</ul>';
+        } else {
+          if (!currentRegion.zip_code) {
+            resultEl.textContent = 'No ZIP in region. Enter a ZIP or Property ID above.';
+            return;
+          }
+          const rows = await apiPost('/queries/f1/comps', { zip_code: currentRegion.zip_code, sale_year: 2024, limit: 50, min_comps: 1, ppsf_min: 400 });
+          const valid = rows.filter(r => typeof r.living_sq_ft === 'number' && r.living_sq_ft > 0);
+          if (valid.length === 0) {
+            resultEl.textContent = 'No comp data for this ZIP. Try a Property ID for parcel-level recommendation.';
+            return;
+          }
+          const bucketSize = 500;
+          const bucketKey = (sqft) => Math.floor(sqft / bucketSize) * bucketSize;
+          const byBucket = {};
+          valid.forEach(r => {
+            const b = bucketKey(r.living_sq_ft);
+            if (!byBucket[b]) byBucket[b] = { count: 0, ppsfs: [] };
+            byBucket[b].count++;
+            if (typeof r.ppsf === 'number' && !isNaN(r.ppsf)) byBucket[b].ppsfs.push(r.ppsf);
+          });
+          const buckets = Object.keys(byBucket).map(Number).sort((a, b) => a - b);
+          let bestBucket = null;
+          let bestScore = 0;
+          buckets.forEach(b => {
+            const d = byBucket[b];
+            const med = d.ppsfs.length ? d.ppsfs.slice().sort((x, y) => x - y)[Math.floor(d.ppsfs.length * 0.5)] : 0;
+            const score = d.count * (med > 0 ? Math.log(med) : 0);
+            if (score > bestScore) { bestScore = score; bestBucket = b; }
+          });
+          if (bestBucket != null) {
+            const d = byBucket[bestBucket];
+            const low = bestBucket, high = bestBucket + bucketSize;
+            resultEl.innerHTML = 'Recommended build size for this ZIP: <strong>' + low + '–' + high + ' sq ft</strong>. Most sales and strong PPSF in this band.';
+          } else {
+            resultEl.textContent = 'Could not derive a size band. See feature set below.';
+          }
+          const tableRows = buckets.map(b => {
+            const d = byBucket[b];
+            const med = d.ppsfs.length ? Math.round(d.ppsfs.slice().sort((x, y) => x - y)[Math.floor(d.ppsfs.length * 0.5)]) : '—';
+            return '<tr><td>' + b + '–' + (b + bucketSize) + '</td><td>' + d.count + '</td><td>' + (med !== '—' ? '$' + med : '—') + '</td></tr>';
+          });
+          featuresEl.innerHTML = '<p style="margin: 0 0 0.25rem;">Feature set – sales by size band (ZIP ' + currentRegion.zip_code + ', 2024):</p><table style="margin-top: 0.25rem;"><thead><tr><th>Size band (sq ft)</th><th>Sales</th><th>Median PPSF</th></tr></thead><tbody>' + tableRows.join('') + '</tbody></table>';
+        }
+      } catch (e) {
+        resultEl.textContent = '';
+        errEl.textContent = e.message || 'Request failed.';
+      }
+    });
+
+    // Region panel: feasibility (only when we have property_id)
+    document.getElementById('btn-region-feasibility').addEventListener('click', async () => {
+      if (!currentRegion || currentRegion.property_id == null) {
+        document.getElementById('region-feasibility-result').textContent = 'Enter a Property ID above and click Show features to run feasibility here.';
+        return;
+      }
+      const errEl = document.getElementById('region-feasibility-error');
+      const resultEl = document.getElementById('region-feasibility-result');
+      errEl.textContent = '';
+      resultEl.textContent = 'Loading…';
+      const sqft = parseFloat(document.getElementById('region-target-sqft').value) || 2700;
+      const productType = document.getElementById('region-product-type').value;
+      try {
+        const res = await apiPost('/decisions/feasibility', {
+          property_id: currentRegion.property_id,
+          target_sqft: sqft,
+          product_type: productType
+        });
+        resultEl.innerHTML = res.pass_fail
+          ? '<strong style="color: #3fb950;">Pass</strong> – Feasible for ' + sqft + ' sq ft.'
+          : '<strong style="color: #f85149;">Fail</strong> – Not feasible for ' + sqft + ' sq ft.';
+        if (res.reason_messages && res.reason_messages.length) {
+          resultEl.innerHTML += '<ul style="margin: 0.25rem 0 0 1rem;">' + res.reason_messages.map(m => '<li>' + m + '</li>').join('') + '</ul>';
+        }
+      } catch (e) {
+        resultEl.textContent = '';
+        errEl.textContent = e.message || 'Request failed.';
+      }
+    });
+
+    // Region panel: comps by ZIP
+    document.getElementById('btn-region-comps').addEventListener('click', async () => {
+      if (!currentRegion || !currentRegion.zip_code) {
+        document.getElementById('region-comps-result').textContent = 'No ZIP in region. Use a Property ID or enter a ZIP above.';
+        return;
+      }
+      const errEl = document.getElementById('region-comps-error');
+      const resultEl = document.getElementById('region-comps-result');
+      errEl.textContent = '';
+      resultEl.textContent = 'Loading…';
+      const year = parseInt(document.getElementById('region-comps-year').value, 10) || 2024;
+      try {
+        const rows = await apiPost('/queries/f1/comps', { zip_code: currentRegion.zip_code, sale_year: year, limit: 20, min_comps: 30, ppsf_min: 400 });
+        const ppsfs = rows.map(r => r.ppsf).filter(x => typeof x === 'number' && !isNaN(x));
+        const n = ppsfs.length;
+        if (n === 0) {
+          resultEl.textContent = 'No comps for ZIP ' + currentRegion.zip_code + ', ' + year + '.';
+          return;
+        }
+        const sorted = ppsfs.slice().sort((a, b) => a - b);
+        const p50 = sorted[Math.floor(n * 0.5)];
+        const p25 = sorted[Math.floor(n * 0.25)];
+        const p75 = sorted[Math.floor(n * 0.75)];
+        resultEl.textContent = 'ZIP ' + currentRegion.zip_code + ' (' + year + '): ' + n + ' comps. Median PPSF $' + Math.round(p50) + ', p25 $' + Math.round(p25) + ', p75 $' + Math.round(p75) + '.';
+      } catch (e) {
+        resultEl.textContent = '';
+        errEl.textContent = e.message || 'Request failed.';
+      }
+    });
+
+    // Region panel: where to build
+    document.getElementById('btn-region-where').addEventListener('click', async () => {
+      if (!currentRegion) return;
+      const errEl = document.getElementById('region-where-error');
+      const resultEl = document.getElementById('region-where-result');
+      const tableWrap = document.getElementById('region-where-table-wrap');
+      errEl.textContent = '';
+      resultEl.textContent = 'Loading…';
+      tableWrap.innerHTML = '';
+      const targetSqft = parseFloat(document.getElementById('region-where-sqft').value) || 2700;
+      const geography = document.getElementById('region-where-geo').value;
+      try {
+        const rows = await apiPost('/decisions/product-areas', {
+          target_sqft: targetSqft,
+          product_type: 'SINGLE FAMILY RESIDENCE',
+          city_name: currentRegion.city_name || getSelectedCity(),
+          geography: geography,
+          min_comp_count: 10,
+          limit: 30
+        });
+        resultEl.textContent = rows.length + ' areas.';
+        tableWrap.innerHTML = '<table><thead><tr><th>Area</th><th>Type</th><th>Median PPSF</th><th>DOM</th><th>Comps</th><th>Supply</th><th>Score</th></tr></thead><tbody>' +
+          rows.map(r => '<tr><td>' + r.geo_id + '</td><td>' + r.geo_type + '</td><td>' + (r.median_ppsf != null ? '$' + Math.round(r.median_ppsf) : '—') + '</td><td>' + (r.median_dom != null ? Math.round(r.median_dom) : '—') + '</td><td>' + r.comp_count + '</td><td>' + (r.supply_count != null ? r.supply_count : '—') + '</td><td>' + (r.score != null ? r.score.toFixed(2) : '—') + '</td></tr>').join('') + '</tbody></table>';
+      } catch (e) {
+        resultEl.textContent = '';
+        errEl.textContent = e.message || 'Request failed.';
+      }
+    });
+
+    // Region panel: Home size heat map (living sq ft, dynamic bucket)
+    document.getElementById('btn-region-homesize-heatmap').addEventListener('click', async () => {
+      if (!currentRegion || !currentRegion.zip_code) {
+        document.getElementById('region-homesize-heatmap-result').textContent = 'No ZIP in region. Enter a Property ID or ZIP above.';
+        document.getElementById('region-homesize-heatmap-wrap').innerHTML = '';
+        if (chartRegionHomesizeBar) { chartRegionHomesizeBar.destroy(); chartRegionHomesizeBar = null; }
+        return;
+      }
+      const errEl = document.getElementById('region-homesize-heatmap-error');
+      const resultEl = document.getElementById('region-homesize-heatmap-result');
+      const wrapEl = document.getElementById('region-homesize-heatmap-wrap');
+      errEl.textContent = '';
+      resultEl.textContent = 'Loading…';
+      wrapEl.innerHTML = '';
+      const bucketSize = parseInt(document.getElementById('region-homesize-bucket').value, 10) || 500;
+      const yearFrom = parseInt(document.getElementById('region-homesize-year-from').value, 10);
+      const yearTo = parseInt(document.getElementById('region-homesize-year-to').value, 10);
+      if (isNaN(yearFrom) || isNaN(yearTo) || yearFrom < 1900 || yearTo < 1900) {
+        errEl.textContent = 'Enter valid year built range (from and to).';
+        resultEl.textContent = '';
+        if (chartRegionHomesizeBar) { chartRegionHomesizeBar.destroy(); chartRegionHomesizeBar = null; }
+        return;
+      }
+      if (yearFrom > yearTo) {
+        errEl.textContent = 'Year built from must be ≤ year built to.';
+        resultEl.textContent = '';
+        if (chartRegionHomesizeBar) { chartRegionHomesizeBar.destroy(); chartRegionHomesizeBar = null; }
+        return;
+      }
+      try {
+        const rows = await apiPost('/queries/region-home-sizes', {
+          zip_code: String(currentRegion.zip_code).trim(),
+          city_name: currentRegion.property_id ? (currentRegion.city_name || getSelectedCity()) : '',
+          min_year_built: yearFrom,
+          max_year_built: yearTo,
+          limit: 5000
+        });
+        const valid = rows.filter(r => {
+          const sq = r.living_sq_ft != null ? Number(r.living_sq_ft) : NaN;
+          return !isNaN(sq) && sq > 0;
+        }).map(r => ({ ...r, living_sq_ft: Number(r.living_sq_ft) }));
+        if (valid.length === 0) {
+          resultEl.textContent = 'No parcel home size data for this region and year built range. Try a different ZIP or widen the year range (e.g. 2000–2024).';
+          if (chartRegionHomesizeBar) { chartRegionHomesizeBar.destroy(); chartRegionHomesizeBar = null; }
+          return;
+        }
+        const CAP_HOME_SQFT = 5000;
+        const sqfts = valid.map(r => r.living_sq_ft);
+        const minSqft = Math.min(...sqfts);
+        const bucketKey = (sqft) => sqft > CAP_HOME_SQFT ? CAP_HOME_SQFT : Math.floor(sqft / bucketSize) * bucketSize;
+        const buckets = {};
+        valid.forEach(r => {
+          const b = bucketKey(r.living_sq_ft);
+          buckets[b] = (buckets[b] || 0) + 1;
+        });
+        const allBuckets = [];
+        for (let b = Math.floor(minSqft / bucketSize) * bucketSize; b <= CAP_HOME_SQFT; b += bucketSize) allBuckets.push(b);
+        if (allBuckets.indexOf(CAP_HOME_SQFT) === -1) allBuckets.push(CAP_HOME_SQFT);
+        const maxCount = Math.max(1, ...Object.values(buckets));
+        function colorForCount(c) {
+          if (c === 0) return 'var(--card)';
+          const t = c / maxCount;
+          const r = Math.round(88 + (58 - 88) * t);
+          const g = Math.round(166 + (166 - 102) * t);
+          const b = Math.round(255 + (255 - 51) * t);
+          return 'rgb(' + r + ',' + g + ',' + b + ')';
+        }
+        function homeBucketLabel(b) { return b === CAP_HOME_SQFT ? '5000+' : b + '–' + (b + bucketSize); }
+        let table = '<table class="heatmap-table" style="border-collapse: collapse; font-size: 0.75rem;"><thead><tr><th>Home size (sq ft)</th>';
+        allBuckets.forEach(b => { table += '<th style="padding: 2px 4px; border: 1px solid var(--border);">' + homeBucketLabel(b) + '</th>'; });
+        table += '</tr></thead><tbody><tr><th style="padding: 2px 6px; border: 1px solid var(--border);">Parcels</th>';
+        allBuckets.forEach(b => {
+          const c = buckets[b] || 0;
+          table += '<td style="padding: 2px 4px; border: 1px solid var(--border); background: ' + colorForCount(c) + '; color: ' + (c > maxCount * 0.5 ? 'var(--bg)' : 'var(--text)') + ';" title="' + homeBucketLabel(b) + ' sq ft: ' + c + ' parcels">' + c + '</td>';
+        });
+        table += '</tr></tbody></table>';
+        wrapEl.innerHTML = table;
+        resultEl.textContent = (currentRegion.zip_code ? 'ZIP ' + currentRegion.zip_code + ', ' : '') + (currentRegion.city_name || '') + ': ' + valid.length + ' parcels (year built ' + yearFrom + ' – ' + yearTo + '), bucket ' + bucketSize + ' sq ft (home size). Values > 5000 summed as 5000+. Darker = more.';
+        if (chartRegionHomesizeBar) {
+          chartRegionHomesizeBar.destroy();
+          chartRegionHomesizeBar = null;
+        }
+        const homeLabels = allBuckets.map(b => homeBucketLabel(b));
+        const homeData = allBuckets.map(b => buckets[b] || 0);
+        const homeCanvasEl = document.getElementById('chart-region-homesize');
+        const homeCanvasParent = homeCanvasEl && homeCanvasEl.parentElement;
+        if (homeCanvasParent) {
+          const freshCanvas = document.createElement('canvas');
+          freshCanvas.id = 'chart-region-homesize';
+          homeCanvasParent.replaceChild(freshCanvas, homeCanvasEl);
+        }
+        chartRegionHomesizeBar = new Chart(document.getElementById('chart-region-homesize'), {
+          type: 'bar',
+          data: { labels: homeLabels, datasets: [{ label: 'Parcels (home size)', data: homeData, backgroundColor: 'rgba(58,102,255,0.7)', borderColor: 'rgba(58,102,255,1)', borderWidth: 1 }] },
+          options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { title: { display: true, text: 'Living sq ft bucket' }, ticks: { maxRotation: 45, autoSkip: false } }, y: { beginAtZero: true, title: { display: true, text: 'Count' } } } }
+        });
+        requestAnimationFrame(() => { if (chartRegionHomesizeBar) chartRegionHomesizeBar.resize(); });
+      } catch (e) {
+        resultEl.textContent = '';
+        errEl.textContent = e.message || 'Request failed.';
+      }
+    });
+
+    // Region panel: Lot size heat map (parcel lot_size_sq_ft, dynamic bucket)
+    document.getElementById('btn-region-lotsize-heatmap').addEventListener('click', async () => {
+      if (!currentRegion) {
+        document.getElementById('region-lotsize-heatmap-result').textContent = 'Enter an address (Property ID or ZIP) above and click Show features.';
+        document.getElementById('region-lotsize-heatmap-wrap').innerHTML = '';
+        if (chartRegionLotsizeBar) { chartRegionLotsizeBar.destroy(); chartRegionLotsizeBar = null; }
+        return;
+      }
+      const errEl = document.getElementById('region-lotsize-heatmap-error');
+      const resultEl = document.getElementById('region-lotsize-heatmap-result');
+      const wrapEl = document.getElementById('region-lotsize-heatmap-wrap');
+      errEl.textContent = '';
+      resultEl.textContent = 'Loading…';
+      wrapEl.innerHTML = '';
+      const bucketSize = parseInt(document.getElementById('region-lotsize-bucket').value, 10) || 5000;
+      const yearFrom = parseInt(document.getElementById('region-lotsize-year-from').value, 10);
+      const yearTo = parseInt(document.getElementById('region-lotsize-year-to').value, 10);
+      if (bucketSize < 100) {
+        errEl.textContent = 'Bucket size must be at least 100 sq ft.';
+        resultEl.textContent = '';
+        return;
+      }
+      if (isNaN(yearFrom) || isNaN(yearTo) || yearFrom < 1900 || yearTo < 1900) {
+        errEl.textContent = 'Enter valid year built range (from and to).';
+        resultEl.textContent = '';
+        return;
+      }
+      if (yearFrom > yearTo) {
+        errEl.textContent = 'Year built from must be ≤ year built to.';
+        resultEl.textContent = '';
+        return;
+      }
+      try {
+        const rows = await apiPost('/queries/region-lot-sizes', {
+          city_name: currentRegion.city_name || getSelectedCity(),
+          zip_code: currentRegion.zip_code || null,
+          min_year_built: yearFrom,
+          max_year_built: yearTo,
+          limit: 5000
+        });
+        const sizes = rows.map(r => r.lot_size_sq_ft).filter(x => typeof x === 'number' && x > 0 && !isNaN(x));
+        if (sizes.length === 0) {
+          resultEl.textContent = 'No lot size data for this region.';
+          if (chartRegionLotsizeBar) { chartRegionLotsizeBar.destroy(); chartRegionLotsizeBar = null; }
+          return;
+        }
+        const minSq = Math.min(...sizes);
+        const maxSq = Math.max(...sizes);
+        const bucketKey = (sq) => Math.floor(sq / bucketSize) * bucketSize;
+        const buckets = {};
+        sizes.forEach(sq => {
+          const b = bucketKey(sq);
+          buckets[b] = (buckets[b] || 0) + 1;
+        });
+        const allBuckets = [];
+        for (let b = Math.floor(minSq / bucketSize) * bucketSize; b <= maxSq; b += bucketSize) allBuckets.push(b);
+        const maxCount = Math.max(1, ...Object.values(buckets));
+        function colorForCount(c) {
+          if (c === 0) return 'var(--card)';
+          const t = c / maxCount;
+          const r = Math.round(88 + (58 - 88) * t);
+          const g = Math.round(166 + (166 - 102) * t);
+          const b = Math.round(255 + (255 - 51) * t);
+          return 'rgb(' + r + ',' + g + ',' + b + ')';
+        }
+        let table = '<table class="heatmap-table" style="border-collapse: collapse; font-size: 0.75rem;"><thead><tr><th>Lot size (sq ft)</th>';
+        allBuckets.forEach(b => { table += '<th style="padding: 2px 4px; border: 1px solid var(--border);">' + b + '–' + (b + bucketSize) + '</th>'; });
+        table += '</tr></thead><tbody><tr><th style="padding: 2px 6px; border: 1px solid var(--border);">Parcels</th>';
+        allBuckets.forEach(b => {
+          const c = buckets[b] || 0;
+          table += '<td style="padding: 2px 4px; border: 1px solid var(--border); background: ' + colorForCount(c) + '; color: ' + (c > maxCount * 0.5 ? 'var(--bg)' : 'var(--text)') + ';" title="' + b + '–' + (b + bucketSize) + ' sq ft: ' + c + ' parcels">' + c + '</td>';
+        });
+        table += '</tr></tbody></table>';
+        wrapEl.innerHTML = table;
+        resultEl.textContent = (currentRegion.zip_code ? 'ZIP ' + currentRegion.zip_code + ', ' : '') + currentRegion.city_name + ': ' + sizes.length + ' parcels (year built ' + yearFrom + ' – ' + yearTo + '), bucket ' + bucketSize + ' sq ft (lot size). Darker = more.';
+        if (chartRegionLotsizeBar) {
+          chartRegionLotsizeBar.destroy();
+          chartRegionLotsizeBar = null;
+        }
+        const lotLabels = allBuckets.map(b => b + '–' + (b + bucketSize));
+        const lotData = allBuckets.map(b => buckets[b] || 0);
+        const lotCanvasEl = document.getElementById('chart-region-lotsize');
+        const lotCanvasParent = lotCanvasEl && lotCanvasEl.parentElement;
+        if (lotCanvasParent) {
+          const freshCanvas = document.createElement('canvas');
+          freshCanvas.id = 'chart-region-lotsize';
+          lotCanvasParent.replaceChild(freshCanvas, lotCanvasEl);
+        }
+        chartRegionLotsizeBar = new Chart(document.getElementById('chart-region-lotsize'), {
+          type: 'bar',
+          data: { labels: lotLabels, datasets: [{ label: 'Parcels (lot size)', data: lotData, backgroundColor: 'rgba(58,102,255,0.7)', borderColor: 'rgba(58,102,255,1)', borderWidth: 1 }] },
+          options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { title: { display: true, text: 'Lot size bucket' }, ticks: { maxRotation: 45, autoSkip: false } }, y: { beginAtZero: true, title: { display: true, text: 'Count' } } } }
+        });
+        requestAnimationFrame(() => { if (chartRegionLotsizeBar) chartRegionLotsizeBar.resize(); });
+      } catch (e) {
+        resultEl.textContent = '';
+        errEl.textContent = e.message || 'Request failed.';
+      }
+    });
+
+    // Region panel: Home size × Lot size heat map (2D)
+    document.getElementById('btn-region-homelot-heatmap').addEventListener('click', async () => {
+      if (!currentRegion || !currentRegion.zip_code) {
+        document.getElementById('region-homelot-heatmap-result').textContent = 'No ZIP in region. Enter a Property ID or ZIP above.';
+        document.getElementById('region-homelot-heatmap-wrap').innerHTML = '';
+        return;
+      }
+      const errEl = document.getElementById('region-homelot-heatmap-error');
+      const resultEl = document.getElementById('region-homelot-heatmap-result');
+      const wrapEl = document.getElementById('region-homelot-heatmap-wrap');
+      errEl.textContent = '';
+      resultEl.textContent = 'Loading…';
+      wrapEl.innerHTML = '';
+      const homeBucket = parseInt(document.getElementById('region-homelot-home-bucket').value, 10) || 500;
+      const lotBucket = parseInt(document.getElementById('region-homelot-lot-bucket').value, 10) || 5000;
+      const yearFrom = parseInt(document.getElementById('region-homelot-year-from').value, 10);
+      const yearTo = parseInt(document.getElementById('region-homelot-year-to').value, 10);
+      if (isNaN(yearFrom) || isNaN(yearTo) || yearFrom < 1900 || yearTo < 1900) {
+        errEl.textContent = 'Enter valid year built range (from and to).';
+        resultEl.textContent = '';
+        return;
+      }
+      if (yearFrom > yearTo) {
+        errEl.textContent = 'Year built from must be ≤ year built to.';
+        resultEl.textContent = '';
+        return;
+      }
+      try {
+        const rows = await apiPost('/queries/region-home-lot-sizes', {
+          zip_code: String(currentRegion.zip_code).trim(),
+          city_name: currentRegion.property_id ? (currentRegion.city_name || getSelectedCity()) : '',
+          min_year_built: yearFrom,
+          max_year_built: yearTo,
+          limit: 5000
+        });
+        const valid = rows.filter(r => {
+          const h = r.living_sq_ft != null ? Number(r.living_sq_ft) : NaN;
+          const l = r.lot_size_sq_ft != null ? Number(r.lot_size_sq_ft) : NaN;
+          return !isNaN(h) && h > 0 && !isNaN(l) && l > 0;
+        });
+        if (valid.length === 0) {
+          resultEl.textContent = 'No parcel home × lot data for this region and year built range. Try a different ZIP or widen the year range.';
+          return;
+        }
+        const CAP_HOME_SQFT_2D = 5000;
+        const homeKey = (sq) => sq > CAP_HOME_SQFT_2D ? CAP_HOME_SQFT_2D : Math.floor(sq / homeBucket) * homeBucket;
+        const lotKey = (sq) => Math.floor(sq / lotBucket) * lotBucket;
+        const grid = {};
+        valid.forEach(r => {
+          const h = homeKey(Number(r.living_sq_ft));
+          const l = lotKey(Number(r.lot_size_sq_ft));
+          if (!grid[l]) grid[l] = {};
+          grid[l][h] = (grid[l][h] || 0) + 1;
+        });
+        const lotBuckets = Object.keys(grid).map(Number).sort((a, b) => a - b);
+        const homeBuckets = [];
+        lotBuckets.forEach(lotB => {
+          Object.keys(grid[lotB]).forEach(h => homeBuckets.push(Number(h)));
+        });
+        const allHomeBuckets = [...new Set(homeBuckets)].sort((a, b) => a - b);
+        function homeBucketLabel2D(b) { return b === CAP_HOME_SQFT_2D ? '5000+' : b + '–' + (b + homeBucket); }
+        let maxCountFinal = 1;
+        lotBuckets.forEach(lotB => {
+          allHomeBuckets.forEach(homeB => {
+            const c = (grid[lotB] && grid[lotB][homeB]) || 0;
+            if (c > maxCountFinal) maxCountFinal = c;
+          });
+        });
+        maxCountFinal = Math.max(1, maxCountFinal);
+        function colorForCount(c) {
+          if (c === 0) return 'var(--card)';
+          const t = c / maxCountFinal;
+          const r = Math.round(88 + (58 - 88) * t);
+          const g = Math.round(166 + (166 - 102) * t);
+          const b = Math.round(255 + (255 - 51) * t);
+          return 'rgb(' + r + ',' + g + ',' + b + ')';
+        }
+        let table = '<table class="heatmap-table" style="border-collapse: collapse; font-size: 0.7rem;"><thead><tr><th style="padding: 2px 4px; border: 1px solid var(--border);">Lot ↓ / Home →</th>';
+        allHomeBuckets.forEach(b => { table += '<th style="padding: 2px 4px; border: 1px solid var(--border);">' + homeBucketLabel2D(b) + '</th>'; });
+        table += '</tr></thead><tbody>';
+        lotBuckets.forEach(lotB => {
+          table += '<tr><th style="padding: 2px 4px; border: 1px solid var(--border); text-align: right;">' + lotB + '–' + (lotB + lotBucket) + '</th>';
+          allHomeBuckets.forEach(homeB => {
+            const c = (grid[lotB] && grid[lotB][homeB]) || 0;
+            table += '<td style="padding: 2px 4px; border: 1px solid var(--border); background: ' + colorForCount(c) + '; color: ' + (c > maxCountFinal * 0.5 ? 'var(--bg)' : 'var(--text)') + ';" title="Lot ' + lotB + '–' + (lotB + lotBucket) + ', Home ' + homeBucketLabel2D(homeB) + ': ' + c + '">' + c + '</td>';
+          });
+          table += '</tr>';
+        });
+        table += '</tbody></table>';
+        wrapEl.innerHTML = table;
+        resultEl.textContent = (currentRegion.zip_code ? 'ZIP ' + currentRegion.zip_code + ', ' : '') + (currentRegion.city_name || '') + ': ' + valid.length + ' parcels (year built ' + yearFrom + ' – ' + yearTo + '). Rows = lot bucket ' + lotBucket + ' sq ft, cols = home bucket ' + homeBucket + ' sq ft. Darker = more.';
+      } catch (e) {
+        resultEl.textContent = '';
+        errEl.textContent = e.message || 'Request failed.';
+      }
+    });
+
+    // Region panel: new-build benchmark
+    document.getElementById('btn-region-benchmark').addEventListener('click', async () => {
+      if (!currentRegion) return;
+      const errEl = document.getElementById('region-benchmark-error');
+      const resultEl = document.getElementById('region-benchmark-result');
+      errEl.textContent = '';
+      resultEl.textContent = 'Loading…';
+      const year = parseInt(document.getElementById('region-benchmark-year').value, 10) || 2024;
+      const minSoldDate = year + '-01-01';
+      const minYearBuilt = year - 5;
+      try {
+        const rows = await apiPost('/decisions/new-build-benchmark', {
+          min_sold_date: minSoldDate,
+          min_year_built: minYearBuilt,
+          city_name: currentRegion.city_name || getSelectedCity(),
+          zip_code: currentRegion.zip_code || null
+        });
+        if (!rows.length) {
+          resultEl.textContent = 'No new-build benchmark data for this region.';
+          return;
+        }
+        const r = rows.find(x => x.sale_year === year) || rows[0];
+        const parts = [];
+        if (r.median_ppsf != null) parts.push('Median PPSF $' + Math.round(r.median_ppsf));
+        if (r.p25_ppsf != null) parts.push('p25 $' + Math.round(r.p25_ppsf));
+        if (r.p75_ppsf != null) parts.push('p75 $' + Math.round(r.p75_ppsf));
+        if (r.sale_count != null) parts.push(r.sale_count + ' sales');
+        resultEl.textContent = (r.zip_code ? 'ZIP ' + r.zip_code + ' ' : '') + (r.sale_year ? r.sale_year : '') + ': ' + parts.join(' · ');
+      } catch (e) {
+        resultEl.textContent = '';
+        errEl.textContent = e.message || 'Request failed.';
+      }
+    });
+
+    // Rebuild eval (address → feasibility + comps)
+    document.getElementById('btn-rebuild-eval').addEventListener('click', async () => {
+      const errEl = document.getElementById('rebuild-eval-error');
+      const wrap = document.getElementById('rebuild-eval-result-wrap');
+      errEl.textContent = '';
+      wrap.style.display = 'none';
+      ['rebuild-eval-resolved', 'rebuild-eval-property-info', 'rebuild-eval-footprint', 'rebuild-eval-attom', 'rebuild-eval-zoning', 'rebuild-eval-feasibility', 'rebuild-eval-comps'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.innerHTML = '';
+      });
+      document.getElementById('rebuild-eval-resolved').textContent = 'Loading…';
+      wrap.style.display = 'block';
+      let addressText = document.getElementById('rebuild-eval-address').value?.trim();
+      let zip = document.getElementById('rebuild-eval-zip').value?.trim() || null;
+      let cityName = getSelectedCity();
+      const targetSqft = parseFloat(document.getElementById('rebuild-eval-target-sqft').value) || 2700;
+      if (!addressText) {
+        errEl.textContent = 'Enter an address (e.g. 11407 CLOVERST, LOS ANGELES, CA 90046) or property ID.';
+        wrap.style.display = 'none';
+        return;
+      }
+      // When input is not a numeric property ID, parse full address for ZIP and city
+      const isNumericId = /^\d+$/.test(addressText);
+      if (!isNumericId) {
+        const parsed = parseAddressForZipAndCity(addressText);
+        if (parsed.zip) {
+          zip = parsed.zip;
+          document.getElementById('rebuild-eval-zip').value = zip;
+        }
+        if (parsed.city) {
+          cityName = parsed.city;
+          setCityDropdown(parsed.city);
+        }
+      }
+      try {
+        const res = await apiPost('/queries/rebuild-eval', {
+          address_text: addressText,
+          target_living_sq_ft: targetSqft,
+          zip_code: zip || undefined,
+          city_name: cityName
+        });
+        wrap.style.display = 'block';
+        // Resolved header
+        const resolvedEl = document.getElementById('rebuild-eval-resolved');
+        let html = 'Property ID: <strong>' + (res.property_id ?? '—') + '</strong> &middot; ';
+        html += 'Address: ' + (res.resolved_address ?? '—') + ' &middot; ';
+        html += '<span class="rebuild-eval-badge ' + (res.is_valid ? 'valid' : 'invalid') + '">' + (res.is_valid ? 'Valid' : 'Invalid') + '</span>';
+        if (res.notes) html += '<br><span style="color: var(--muted);">' + escapeHtml(res.notes) + '</span>';
+        resolvedEl.innerHTML = html;
+        // Property info
+        const pi = res.property_info;
+        const piWrap = document.getElementById('rebuild-eval-property-info-wrap');
+        if (pi) {
+          piWrap.style.display = 'block';
+          document.getElementById('rebuild-eval-property-info').innerHTML =
+            '<table><tr><td>Sold date</td><td>' + (pi.sold_date ?? '—') + '</td></tr>' +
+            '<tr><td>Sold price</td><td>$' + (pi.sold_price != null ? Math.round(pi.sold_price).toLocaleString() : '—') + '</td></tr>' +
+            '<tr><td>Living sq ft</td><td>' + (pi.living_sq_ft ?? '—') + '</td></tr>' +
+            '<tr><td>PPSF</td><td>' + (pi.ppsf ?? '—') + '</td></tr>' +
+            '<tr><td>ZIP / City</td><td>' + (pi.zip_code ?? '—') + ' / ' + (pi.city_name ?? '—') + '</td></tr>' +
+            '<tr><td>Year built</td><td>' + (pi.year_built ?? '—') + '</td></tr></table>';
+        } else {
+          piWrap.style.display = 'none';
+        }
+        // Footprint
+        const fp = res.parcel_footprint;
+        const fpWrap = document.getElementById('rebuild-eval-footprint-wrap');
+        if (fp) {
+          fpWrap.style.display = 'block';
+          document.getElementById('rebuild-eval-footprint').innerHTML =
+            '<table><tr><td>Lot size</td><td>' + (fp.lot_size_sq_ft != null ? fp.lot_size_sq_ft.toLocaleString() + ' sq ft' : '—') + '</td></tr>' +
+            '<tr><td>Width × Depth</td><td>' + (fp.lot_width_ft ?? '—') + ' × ' + (fp.lot_depth_ft ?? '—') + ' ft</td></tr>' +
+            '<tr><td>Ratio band</td><td>' + (fp.ratio_band || '—') + '</td></tr>' +
+            '<tr><td>Valid dimensions</td><td>' + (fp.is_valid_dimensions ? 'Yes' : 'No') + '</td></tr>' +
+            (fp.notes ? '<tr><td>Notes</td><td>' + escapeHtml(fp.notes) + '</td></tr>' : '') + '</table>';
+        } else {
+          fpWrap.style.display = 'none';
+        }
+        // Attom improvement & lot (next to DB data)
+        const attomIL = res.attom_improvement_lot;
+        const attomWrap = document.getElementById('rebuild-eval-attom-wrap');
+        if (attomIL && (attomIL.living_sq_ft != null || attomIL.year_built != null || attomIL.beds != null || attomIL.baths != null || attomIL.lot_sq_ft != null)) {
+          attomWrap.style.display = 'block';
+          const parts = [];
+          if (attomIL.living_sq_ft != null) parts.push(Number(attomIL.living_sq_ft).toLocaleString() + ' sq ft');
+          if (attomIL.beds != null) parts.push(attomIL.beds + ' beds');
+          if (attomIL.baths != null) parts.push(attomIL.baths + ' baths');
+          if (attomIL.year_built != null) parts.push('Built ' + attomIL.year_built);
+          if (attomIL.lot_sq_ft != null) parts.push('Lot ' + Number(attomIL.lot_sq_ft).toLocaleString() + ' sq ft');
+          document.getElementById('rebuild-eval-attom').innerHTML = '<p style="margin: 0; font-size: 0.9rem;">' + parts.join(' &middot; ') + '</p>';
+        } else {
+          attomWrap.style.display = 'none';
+        }
+        // Zoning
+        const z = res.zoning_summary;
+        const zWrap = document.getElementById('rebuild-eval-zoning-wrap');
+        if (z) {
+          zWrap.style.display = 'block';
+          document.getElementById('rebuild-eval-zoning').innerHTML =
+            '<table><tr><td>Zone</td><td>' + (z.zone_code ?? '—') + '</td></tr>' +
+            '<tr><td>Lot size (zoning)</td><td>' + (z.lot_size_sq_ft != null ? z.lot_size_sq_ft.toLocaleString() + ' sq ft' : '—') + '</td></tr>' +
+            '<tr><td>Max GFA estimate</td><td>' + (z.max_gfa_estimate != null ? z.max_gfa_estimate.toLocaleString() + ' sq ft' : '—') + '</td></tr>' +
+            '<tr><td>Max height</td><td>' + (z.max_height_ft ?? '—') + ' ft</td></tr></table>';
+        } else {
+          zWrap.style.display = 'none';
+        }
+        // Buildable footprint (lot minus setbacks)
+        const bf = res.buildable_footprint;
+        const bfWrap = document.getElementById('rebuild-eval-buildable-wrap');
+        if (bf && (bf.buildable_width_ft != null || bf.buildable_depth_ft != null || bf.buildable_sq_ft != null || bf.notes)) {
+          bfWrap.style.display = 'block';
+          document.getElementById('rebuild-eval-buildable').innerHTML =
+            '<table><tr><td>Buildable width</td><td>' + (bf.buildable_width_ft != null ? bf.buildable_width_ft + ' ft' : '—') + '</td></tr>' +
+            '<tr><td>Buildable depth</td><td>' + (bf.buildable_depth_ft != null ? bf.buildable_depth_ft + ' ft' : '—') + '</td></tr>' +
+            '<tr><td>Buildable area</td><td>' + (bf.buildable_sq_ft != null ? bf.buildable_sq_ft.toLocaleString() + ' sq ft' : '—') + '</td></tr>' +
+            (bf.notes ? '<tr><td>Notes</td><td>' + escapeHtml(bf.notes) + '</td></tr>' : '') + '</table>';
+        } else {
+          bfWrap.style.display = 'none';
+        }
+        // Feasibility
+        const f = res.feasibility_fit || {};
+        document.getElementById('rebuild-eval-feasibility').innerHTML =
+          'Max GFA: <strong>' + (f.max_gfa_estimate != null ? f.max_gfa_estimate.toLocaleString() + ' sq ft' : '—') + '</strong> &middot; ' +
+          'Fits target: <strong>' + (f.fits_target_sq_ft ? 'Yes' : 'No') + '</strong>' +
+          (f.fit_notes ? '<br><span style="color: var(--muted);">' + escapeHtml(f.fit_notes) + '</span>' : '');
+        // Comps economics
+        const c = res.comps_economics || {};
+        let compsHtml = 'Comp count: <strong>' + (c.comp_count ?? 0) + '</strong> &middot; Confidence: <strong>' + (c.confidence_band ?? '—') + '</strong>';
+        if (c.price_low != null || c.price_base != null || c.price_high != null) {
+          compsHtml += '<br><span class="rebuild-eval-price">Resale price band: ' +
+            [c.price_low, c.price_base, c.price_high].map(x => x != null ? '$' + Math.round(x).toLocaleString() : '—').join(' &nbsp; / &nbsp; ') +
+            ' &nbsp; (low / base / high)</span>';
+        }
+        if (c.p25_ppsf != null || c.p50_ppsf != null || c.p75_ppsf != null) {
+          compsHtml += '<br>Resale PPSF: p25 ' + (c.p25_ppsf ?? '—') + ' &middot; p50 ' + (c.p50_ppsf ?? '—') + ' &middot; p75 ' + (c.p75_ppsf ?? '—');
+        }
+        if (c.has_newbuild_comps) {
+          if (c.newbuild_price_low != null || c.newbuild_price_base != null || c.newbuild_price_high != null) {
+            compsHtml += '<br><span class="rebuild-eval-price">New-build price band: ' +
+              [c.newbuild_price_low, c.newbuild_price_base, c.newbuild_price_high].map(x => x != null ? '$' + Math.round(x).toLocaleString() : '—').join(' &nbsp; / &nbsp; ') +
+              ' &nbsp; (low / base / high)</span>';
+          }
+          if (c.newbuild_p25_ppsf != null || c.newbuild_p50_ppsf != null || c.newbuild_p75_ppsf != null) {
+            compsHtml += '<br>New-build PPSF: p25 ' + (c.newbuild_p25_ppsf ?? '—') + ' &middot; p50 ' + (c.newbuild_p50_ppsf ?? '—') + ' &middot; p75 ' + (c.newbuild_p75_ppsf ?? '—');
+          }
+        } else if ((c.newbuild_comp_count ?? 0) === 0) {
+          compsHtml += '<br><span style="color: #f85149; font-size: 0.85rem;">No recent new-build comps in this area; pricing uses broader resale comps (negative signal).</span>';
+        }
+        if (c.existing_value != null || c.newbuild_value_base != null || c.build_cost != null) {
+          const parts = [];
+          if (c.existing_value != null) parts.push('Existing value: $' + Math.round(c.existing_value).toLocaleString() + (c.existing_value_source ? ' (' + escapeHtml(c.existing_value_source) + ')' : ''));
+          if (c.newbuild_value_base != null) parts.push('New-build base: $' + Math.round(c.newbuild_value_base).toLocaleString());
+          if (c.build_cost != null) parts.push('Build cost: $' + Math.round(c.build_cost).toLocaleString());
+          if (c.value_accretion != null) parts.push('Accretion: $' + Math.round(c.value_accretion).toLocaleString());
+          if (c.value_created_vs_build_cost != null) parts.push('Value vs cost: $' + Math.round(c.value_created_vs_build_cost).toLocaleString());
+          if (c.margin_ratio != null) parts.push('Margin: ' + Math.round(c.margin_ratio * 100) + '%');
+          compsHtml += '<br>' + parts.join(' &middot; ');
+        }
+        if (c.median_dist_miles != null || c.median_months_ago != null) {
+          compsHtml += '<br>Median distance: ' + (c.median_dist_miles != null ? c.median_dist_miles.toFixed(2) + ' mi' : '—') + ' &middot; Median months ago: ' + (c.median_months_ago != null ? c.median_months_ago.toFixed(1) : '—');
+        }
+        if (c.hint) compsHtml += '<br><span style="color: var(--muted); font-size: 0.9rem;">' + escapeHtml(c.hint) + '</span>';
+        document.getElementById('rebuild-eval-comps').innerHTML = compsHtml;
+        // Store ZIP/city for heatmaps (from request or from response)
+        const evalZip = zip || (res.property_info && res.property_info.zip_code) || '';
+        const evalCity = cityName || (res.property_info && res.property_info.city_name) || getSelectedCity();
+        wrap.dataset.evalZip = evalZip;
+        wrap.dataset.evalCity = (evalCity || '').trim().toUpperCase();
+        document.getElementById('rebuild-eval-heatmap-error').textContent = '';
+        document.getElementById('rebuild-eval-lotsize-result').textContent = '';
+        document.getElementById('rebuild-eval-homesize-result').textContent = '';
+        document.getElementById('rebuild-eval-lotsize-wrap').innerHTML = '';
+        document.getElementById('rebuild-eval-homesize-wrap').innerHTML = '';
+      } catch (e) {
+        wrap.style.display = 'none';
+        errEl.textContent = e.message || 'Request failed.';
+      }
+    });
+
+    // Rebuild eval: Lot size heatmap (same area as eval)
+    document.getElementById('btn-rebuild-eval-lotsize-heatmap').addEventListener('click', async () => {
+      const wrap = document.getElementById('rebuild-eval-result-wrap');
+      const zip = (wrap && wrap.dataset.evalZip) || '';
+      const city = (wrap && wrap.dataset.evalCity) || getSelectedCity();
+      if (!zip && !city) {
+        document.getElementById('rebuild-eval-heatmap-error').textContent = 'Run a rebuild eval first so we know the area (ZIP/city).';
+        return;
+      }
+      const errEl = document.getElementById('rebuild-eval-heatmap-error');
+      const resultEl = document.getElementById('rebuild-eval-lotsize-result');
+      const wrapEl = document.getElementById('rebuild-eval-lotsize-wrap');
+      errEl.textContent = '';
+      resultEl.textContent = 'Loading…';
+      wrapEl.innerHTML = '';
+      const bucketSize = parseInt(document.getElementById('rebuild-eval-lot-bucket').value, 10) || 5000;
+      const yearFrom = parseInt(document.getElementById('rebuild-eval-year-from').value, 10);
+      const yearTo = parseInt(document.getElementById('rebuild-eval-year-to').value, 10);
+      try {
+        const rows = await apiPost('/queries/region-lot-sizes', {
+          city_name: city || 'LOS ANGELES',
+          zip_code: zip || null,
+          min_year_built: yearFrom,
+          max_year_built: yearTo,
+          limit: 5000
+        });
+        const sizes = rows.map(r => r.lot_size_sq_ft).filter(x => typeof x === 'number' && x > 0 && !isNaN(x));
+        if (sizes.length === 0) {
+          resultEl.textContent = 'No lot size data for this area.';
+          if (chartRebuildEvalLotsize) { chartRebuildEvalLotsize.destroy(); chartRebuildEvalLotsize = null; }
+          return;
+        }
+        const minSq = Math.min(...sizes);
+        const maxSq = Math.max(...sizes);
+        const bucketKey = (sq) => Math.floor(sq / bucketSize) * bucketSize;
+        const buckets = {};
+        sizes.forEach(sq => { const b = bucketKey(sq); buckets[b] = (buckets[b] || 0) + 1; });
+        const allBuckets = [];
+        for (let b = Math.floor(minSq / bucketSize) * bucketSize; b <= maxSq; b += bucketSize) allBuckets.push(b);
+        const maxCount = Math.max(1, ...Object.values(buckets));
+        function colorForCount(c) {
+          if (c === 0) return 'var(--card)';
+          const t = c / maxCount;
+          return 'rgb(' + Math.round(88 + (58 - 88) * t) + ',' + Math.round(166 + (166 - 102) * t) + ',' + Math.round(255 + (255 - 51) * t) + ')';
+        }
+        let table = '<table style="border-collapse: collapse; font-size: 0.75rem;"><thead><tr><th>Lot size (sq ft)</th>';
+        allBuckets.forEach(b => { table += '<th style="padding: 2px 4px; border: 1px solid var(--border);">' + b + '–' + (b + bucketSize) + '</th>'; });
+        table += '</tr></thead><tbody><tr><th style="padding: 2px 6px; border: 1px solid var(--border);">Parcels</th>';
+        allBuckets.forEach(b => {
+          const c = buckets[b] || 0;
+          table += '<td style="padding: 2px 4px; border: 1px solid var(--border); background: ' + colorForCount(c) + '; color: ' + (c > maxCount * 0.5 ? 'var(--bg)' : 'var(--text)') + ';">' + c + '</td>';
+        });
+        table += '</tr></tbody></table>';
+        wrapEl.innerHTML = table;
+        resultEl.textContent = (zip ? 'ZIP ' + zip + ', ' : '') + city + ': ' + sizes.length + ' parcels (year built ' + yearFrom + '–' + yearTo + '), bucket ' + bucketSize + ' sq ft.';
+        if (chartRebuildEvalLotsize) { chartRebuildEvalLotsize.destroy(); chartRebuildEvalLotsize = null; }
+        const lotLabels = allBuckets.map(b => b + '–' + (b + bucketSize));
+        const lotData = allBuckets.map(b => buckets[b] || 0);
+        const canvasEl = document.getElementById('chart-rebuild-eval-lotsize');
+        if (canvasEl.parentElement) {
+          const fresh = document.createElement('canvas');
+          fresh.id = 'chart-rebuild-eval-lotsize';
+          canvasEl.parentElement.replaceChild(fresh, canvasEl);
+        }
+        chartRebuildEvalLotsize = new Chart(document.getElementById('chart-rebuild-eval-lotsize'), {
+          type: 'bar',
+          data: { labels: lotLabels, datasets: [{ label: 'Parcels (lot size)', data: lotData, backgroundColor: 'rgba(58,102,255,0.7)', borderColor: 'rgba(58,102,255,1)', borderWidth: 1 }] },
+          options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { title: { display: true, text: 'Lot size bucket' }, ticks: { maxRotation: 45 } }, y: { beginAtZero: true, title: { display: true, text: 'Count' } } } }
+        });
+        requestAnimationFrame(() => { if (chartRebuildEvalLotsize) chartRebuildEvalLotsize.resize(); });
+      } catch (e) {
+        resultEl.textContent = '';
+        errEl.textContent = e.message || 'Request failed.';
+      }
+    });
+
+    // Rebuild eval: Home size heatmap (same area as eval)
+    document.getElementById('btn-rebuild-eval-homesize-heatmap').addEventListener('click', async () => {
+      const wrap = document.getElementById('rebuild-eval-result-wrap');
+      const zip = (wrap && wrap.dataset.evalZip) || '';
+      const city = (wrap && wrap.dataset.evalCity) || getSelectedCity();
+      if (!zip) {
+        document.getElementById('rebuild-eval-heatmap-error').textContent = 'Run a rebuild eval first (with an address that has a ZIP). Home size heatmap requires ZIP.';
+        return;
+      }
+      const errEl = document.getElementById('rebuild-eval-heatmap-error');
+      const resultEl = document.getElementById('rebuild-eval-homesize-result');
+      const wrapEl = document.getElementById('rebuild-eval-homesize-wrap');
+      errEl.textContent = '';
+      resultEl.textContent = 'Loading…';
+      wrapEl.innerHTML = '';
+      const bucketSize = parseInt(document.getElementById('rebuild-eval-home-bucket').value, 10) || 500;
+      const yearFrom = parseInt(document.getElementById('rebuild-eval-year-from').value, 10);
+      const yearTo = parseInt(document.getElementById('rebuild-eval-year-to').value, 10);
+      try {
+        const rows = await apiPost('/queries/region-home-sizes', {
+          zip_code: String(zip).trim(),
+          city_name: city || '',
+          min_year_built: yearFrom,
+          max_year_built: yearTo,
+          limit: 5000
+        });
+        const valid = rows.filter(r => {
+          const sq = r.living_sq_ft != null ? Number(r.living_sq_ft) : NaN;
+          return !isNaN(sq) && sq > 0;
+        }).map(r => ({ ...r, living_sq_ft: Number(r.living_sq_ft) }));
+        if (valid.length === 0) {
+          resultEl.textContent = 'No home size data for this area.';
+          if (chartRebuildEvalHomesize) { chartRebuildEvalHomesize.destroy(); chartRebuildEvalHomesize = null; }
+          return;
+        }
+        const CAP = 5000;
+        const bucketKey = (sqft) => sqft > CAP ? CAP : Math.floor(sqft / bucketSize) * bucketSize;
+        const buckets = {};
+        valid.forEach(r => { const b = bucketKey(r.living_sq_ft); buckets[b] = (buckets[b] || 0) + 1; });
+        const minSqft = Math.min(...valid.map(r => r.living_sq_ft));
+        const allBuckets = [];
+        for (let b = Math.floor(minSqft / bucketSize) * bucketSize; b <= CAP; b += bucketSize) allBuckets.push(b);
+        if (allBuckets.indexOf(CAP) === -1) allBuckets.push(CAP);
+        const maxCount = Math.max(1, ...Object.values(buckets));
+        function colorForCount(c) {
+          if (c === 0) return 'var(--card)';
+          const t = c / maxCount;
+          return 'rgb(' + Math.round(88 + (58 - 88) * t) + ',' + Math.round(166 + (166 - 102) * t) + ',' + Math.round(255 + (255 - 51) * t) + ')';
+        }
+        function lbl(b) { return b === CAP ? '5000+' : b + '–' + (b + bucketSize); }
+        let table = '<table style="border-collapse: collapse; font-size: 0.75rem;"><thead><tr><th>Home size (sq ft)</th>';
+        allBuckets.forEach(b => { table += '<th style="padding: 2px 4px; border: 1px solid var(--border);">' + lbl(b) + '</th>'; });
+        table += '</tr></thead><tbody><tr><th style="padding: 2px 6px; border: 1px solid var(--border);">Parcels</th>';
+        allBuckets.forEach(b => {
+          const c = buckets[b] || 0;
+          table += '<td style="padding: 2px 4px; border: 1px solid var(--border); background: ' + colorForCount(c) + '; color: ' + (c > maxCount * 0.5 ? 'var(--bg)' : 'var(--text)') + ';">' + c + '</td>';
+        });
+        table += '</tr></tbody></table>';
+        wrapEl.innerHTML = table;
+        resultEl.textContent = 'ZIP ' + zip + ', ' + city + ': ' + valid.length + ' parcels (year built ' + yearFrom + '–' + yearTo + '), bucket ' + bucketSize + ' sq ft (home size).';
+        if (chartRebuildEvalHomesize) { chartRebuildEvalHomesize.destroy(); chartRebuildEvalHomesize = null; }
+        const homeLabels = allBuckets.map(b => lbl(b));
+        const homeData = allBuckets.map(b => buckets[b] || 0);
+        const canvasEl = document.getElementById('chart-rebuild-eval-homesize');
+        if (canvasEl.parentElement) {
+          const fresh = document.createElement('canvas');
+          fresh.id = 'chart-rebuild-eval-homesize';
+          canvasEl.parentElement.replaceChild(fresh, canvasEl);
+        }
+        chartRebuildEvalHomesize = new Chart(document.getElementById('chart-rebuild-eval-homesize'), {
+          type: 'bar',
+          data: { labels: homeLabels, datasets: [{ label: 'Parcels (home size)', data: homeData, backgroundColor: 'rgba(58,102,255,0.7)', borderColor: 'rgba(58,102,255,1)', borderWidth: 1 }] },
+          options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { title: { display: true, text: 'Living sq ft bucket' }, ticks: { maxRotation: 45 } }, y: { beginAtZero: true, title: { display: true, text: 'Count' } } } }
+        });
+        requestAnimationFrame(() => { if (chartRebuildEvalHomesize) chartRebuildEvalHomesize.resize(); });
+      } catch (e) {
+        resultEl.textContent = '';
+        errEl.textContent = e.message || 'Request failed.';
+      }
+    });
+    function escapeHtml(s) {
+      const div = document.createElement('div');
+      div.textContent = s;
+      return div.innerHTML;
+    }
+    // Parse "11407 CLOVERST, LOS ANGELES, CA 90046" -> { zip: "90046", city: "LOS ANGELES" }
+    function parseAddressForZipAndCity(addressStr) {
+      const s = addressStr.trim();
+      const out = { zip: null, city: null };
+      // ZIP: prefer "CA 90046" or ", 90046" at end; else any 5-digit that looks like ZIP (9xxxx for CA)
+      const caZipMatch = s.match(/,?\s*CA\s+(\d{5})(?:-\d{4})?\s*$/i);
+      if (caZipMatch) {
+        out.zip = caZipMatch[1];
+      } else {
+        const lastFive = s.match(/(\d{5})(?:-\d{4})?\s*$/);
+        if (lastFive) out.zip = lastFive[1];
+      }
+      // City: segment before ", CA" or before last comma when we have "..., CITY, CA 90046"
+      const parts = s.split(',').map(function(p) { return p.trim(); }).filter(Boolean);
+      if (parts.length >= 2 && /^CA\s+\d{5}/i.test(parts[parts.length - 1])) {
+        out.city = parts[parts.length - 2].toUpperCase();
+      } else if (parts.length >= 2 && out.zip && parts[parts.length - 1] === out.zip) {
+        out.city = parts[parts.length - 2].toUpperCase();
+      }
+      return out;
+    }
+
+    // 7) Rebuild – Address (feasibility)
+    document.getElementById('btn-rebuild-feasibility').addEventListener('click', async () => {
+      const errEl = document.getElementById('rebuild-error');
+      const resultEl = document.getElementById('rebuild-result');
+      const reasonsEl = document.getElementById('rebuild-reasons');
+      const economicsEl = document.getElementById('rebuild-economics');
+      errEl.textContent = '';
+      resultEl.textContent = '';
+      reasonsEl.textContent = '';
+      economicsEl.textContent = '';
+      const pid = document.getElementById('rebuild-property-id').value?.trim();
+      const sqft = parseFloat(document.getElementById('rebuild-target-sqft').value);
+      const productType = document.getElementById('rebuild-product-type').value;
+      const lotW = document.getElementById('rebuild-lot-width').value?.trim();
+      const lotD = document.getElementById('rebuild-lot-depth').value?.trim();
+      if (!pid || isNaN(sqft) || sqft <= 0) {
+        errEl.textContent = 'Enter Property ID and target size (sq ft).';
+        return;
+      }
+      const body = {
+        property_id: parseInt(pid, 10),
+        target_sqft: sqft,
+        product_type: productType
+      };
+      if (lotW && lotD) {
+        const w = parseFloat(lotW), d = parseFloat(lotD);
+        if (!isNaN(w) && w > 0 && !isNaN(d) && d > 0) {
+          body.lot_width_ft = w;
+          body.lot_depth_ft = d;
+        }
+      }
+      const btn = document.getElementById('btn-rebuild-feasibility');
+      btn.disabled = true;
+      resultEl.textContent = 'Loading…';
+      try {
+        const res = await apiPost('/decisions/feasibility', body);
+        resultEl.innerHTML = res.pass_fail
+          ? '<strong style="color: #3fb950;">Pass</strong> – Feasible for ' + sqft + ' sq ft.'
+          : '<strong style="color: #f85149;">Fail</strong> – Not feasible for ' + sqft + ' sq ft.';
+        if (res.reason_messages && res.reason_messages.length) {
+          reasonsEl.innerHTML = 'Reasons: <ul style="margin: 0.25rem 0 0 1rem;">' + res.reason_messages.map(m => '<li>' + m + '</li>').join('') + '</ul>';
+        } else if (res.reason_codes && res.reason_codes.length) {
+          reasonsEl.textContent = 'Reasons: ' + res.reason_codes.join(', ');
+        }
+        if (res.pass_fail && (res.expected_p50_price != null || res.expected_median_dom != null)) {
+          const parts = [];
+          if (res.recommended_size_band_low != null && res.recommended_size_band_high != null) {
+            parts.push('Size band: ' + res.recommended_size_band_low + '–' + res.recommended_size_band_high + ' sq ft');
+          }
+          if (res.recommended_footprint_band) parts.push('Footprint: ' + res.recommended_footprint_band);
+          if (res.expected_p25_price != null) parts.push('Price p25: $' + Math.round(res.expected_p25_price).toLocaleString());
+          if (res.expected_p50_price != null) parts.push('p50: $' + Math.round(res.expected_p50_price).toLocaleString());
+          if (res.expected_p75_price != null) parts.push('p75: $' + Math.round(res.expected_p75_price).toLocaleString());
+          if (res.expected_median_dom != null) parts.push('Median DOM: ' + Math.round(res.expected_median_dom));
+          if (res.confidence_band) parts.push('Confidence: ' + res.confidence_band);
+          economicsEl.textContent = parts.join(' · ');
+        }
+        if (res.confidence_explanation) {
+          economicsEl.textContent = (economicsEl.textContent ? economicsEl.textContent + ' ' : '') + res.confidence_explanation;
+        }
+      } catch (e) {
+        resultEl.textContent = '';
+        errEl.textContent = e.message || 'Request failed.';
+      } finally {
+        btn.disabled = false;
+      }
+    });
+
+    // 8) Rebuild – Where to build
+    let chartWhereBar = null;
+    document.getElementById('btn-where-rank').addEventListener('click', async () => {
+      const errEl = document.getElementById('where-error');
+      const sumEl = document.getElementById('where-summary');
+      const tableWrap = document.getElementById('where-table-wrap');
+      errEl.textContent = '';
+      sumEl.textContent = '';
+      tableWrap.innerHTML = '';
+      const targetSqft = parseFloat(document.getElementById('where-target-sqft').value);
+      const productType = document.getElementById('where-product-type').value;
+      const geography = document.getElementById('where-geography').value;
+      if (isNaN(targetSqft) || targetSqft <= 0) {
+        errEl.textContent = 'Enter target size (sq ft).';
+        return;
+      }
+      const btn = document.getElementById('btn-where-rank');
+      btn.disabled = true;
+      sumEl.textContent = 'Loading…';
+      try {
+        const rows = await apiPost('/decisions/product-areas', {
+          target_sqft: targetSqft,
+          product_type: productType,
+          city_name: getSelectedCity(),
+          geography: geography,
+          min_comp_count: 10,
+          limit: 30
+        });
+        sumEl.textContent = rows.length + ' areas. Lot requirements: min dimension ~' + Math.round(Math.sqrt(targetSqft / 2) * 1.15) + ' ft for ' + targetSqft + ' sq ft.';
+        tableWrap.innerHTML = '<table><thead><tr><th>Area</th><th>Type</th><th>Median PPSF</th><th>DOM</th><th>Comps</th><th>Supply</th><th>Score</th></tr></thead><tbody>' +
+          rows.map(r => '<tr><td>' + r.geo_id + '</td><td>' + r.geo_type + '</td><td>' + (r.median_ppsf != null ? '$' + Math.round(r.median_ppsf) : '—') + '</td><td>' + (r.median_dom != null ? Math.round(r.median_dom) : '—') + '</td><td>' + r.comp_count + '</td><td>' + (r.supply_count != null ? r.supply_count : '—') + '</td><td>' + (r.score != null ? r.score.toFixed(2) : '—') + '</td></tr>').join('') + '</tbody></table>';
+        if (rows.length > 0 && rows[0].median_ppsf != null && window.Chart) {
+          const top = rows.slice(0, 15);
+          if (chartWhereBar) chartWhereBar.destroy();
+          chartWhereBar = new Chart(document.getElementById('chart-where-bar'), {
+            type: 'bar',
+            data: { labels: top.map(r => r.geo_id), datasets: [{ label: 'Median PPSF', data: top.map(r => r.median_ppsf), backgroundColor: 'rgba(88, 166, 255, 0.6)' }] },
+            options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { beginAtZero: true } } }
+          });
+        }
+      } catch (e) {
+        sumEl.textContent = '';
+        errEl.textContent = e.message || 'Request failed.';
+      } finally {
+        btn.disabled = false;
+      }
+    });
+
+    // Rebuild – Site search (no address)
+    document.getElementById('btn-site-search').addEventListener('click', async () => {
+      const errEl = document.getElementById('site-error');
+      const sumEl = document.getElementById('site-summary');
+      const tableWrap = document.getElementById('site-table-wrap');
+      errEl.textContent = '';
+      sumEl.textContent = '';
+      tableWrap.innerHTML = '';
+      const targetSqft = parseFloat(document.getElementById('site-target-sqft').value);
+      const minWidth = parseFloat(document.getElementById('site-min-width').value);
+      const minDepth = parseFloat(document.getElementById('site-min-depth').value);
+      const zip = (document.getElementById('site-zip').value || '').trim();
+      const zonesRaw = (document.getElementById('site-zones').value || '').trim();
+      const limit = parseInt(document.getElementById('site-limit').value, 10) || 50;
+      if (isNaN(targetSqft) || targetSqft <= 0) {
+        errEl.textContent = 'Enter a target size (sq ft).';
+        return;
+      }
+      const body = {
+        target_sqft: targetSqft,
+        city_name: getSelectedCity(),
+        zip_code: zip || null,
+        min_width_ft: !isNaN(minWidth) && minWidth > 0 ? minWidth : null,
+        min_depth_ft: !isNaN(minDepth) && minDepth > 0 ? minDepth : null,
+        limit: limit,
+      };
+      if (zonesRaw) {
+        body.zone_codes = zonesRaw.split(/[,]+/).map(s => s.trim()).filter(Boolean);
+      }
+      const btn = document.getElementById('btn-site-search');
+      btn.disabled = true;
+      sumEl.textContent = 'Searching parcels…';
+      try {
+        const rows = await apiPost('/decisions/site-search', body);
+        if (!rows.length) {
+          sumEl.textContent = 'No parcels found that meet these zoning and footprint filters.';
+          return;
+        }
+        sumEl.textContent = rows.length + ' parcel(s) found. Showing up to ' + limit + ' matches.';
+        tableWrap.innerHTML = '<table><thead><tr><th>Property ID</th><th>ZIP</th><th>City</th><th>Zone</th><th>Lot size (sq ft)</th><th>Lot (W×D ft)</th><th>Max GFA (sq ft)</th></tr></thead><tbody>' +
+          rows.map(r => {
+            const lotSize = r.lot_size_sq_ft != null ? Math.round(r.lot_size_sq_ft).toLocaleString() : '—';
+            const lotDims = (r.lot_width_ft != null && r.lot_depth_ft != null)
+              ? Math.round(r.lot_width_ft) + '×' + Math.round(r.lot_depth_ft)
+              : '—';
+            const maxGfa = r.max_gfa_estimate != null ? Math.round(r.max_gfa_estimate).toLocaleString() : '—';
+            return '<tr><td>' + r.property_id + '</td><td>' + (r.zip_code || '') + '</td><td>' + (r.city_name || '') + '</td><td>' + (r.zone_code || '') + '</td><td>' + lotSize + '</td><td>' + lotDims + '</td><td>' + maxGfa + '</td></tr>';
+          }).join('') + '</tbody></table>';
+      } catch (e) {
+        sumEl.textContent = '';
+        errEl.textContent = e.message || 'Request failed.';
+      } finally {
+        btn.disabled = false;
+      }
+    });
+
+    // Target pipeline summary
+    document.getElementById('btn-target-pipeline').addEventListener('click', async () => {
+      const errEl = document.getElementById('tp-error');
+      const sumEl = document.getElementById('tp-summary');
+      errEl.textContent = '';
+      sumEl.textContent = '';
+      const targetSqft = parseFloat(document.getElementById('tp-target-sqft').value);
+      const maxYear = document.getElementById('tp-max-year').value?.trim();
+      const minLiving = document.getElementById('tp-min-living').value?.trim();
+      const maxLiving = document.getElementById('tp-max-living').value?.trim();
+      const zip = (document.getElementById('tp-zip').value || '').trim();
+      const limit = parseInt(document.getElementById('tp-limit').value, 10) || 5000;
+      if (isNaN(targetSqft) || targetSqft <= 0) {
+        errEl.textContent = 'Enter a target home size (sq ft).';
+        return;
+      }
+      const minVal = minLiving ? parseFloat(minLiving) : NaN;
+      const maxVal = maxLiving ? parseFloat(maxLiving) : NaN;
+      const hasMin = !isNaN(minVal) && minVal > 0;
+      const hasMax = !isNaN(maxVal) && maxVal > 0;
+      if (hasMin && hasMax) {
+        const low = minVal * 0.85;
+        const high = maxVal * 1.15;
+        if (targetSqft < low || targetSqft > high) {
+          errEl.textContent = 'Target home size must be in [min, max] ±15%: ' + Math.round(low) + '–' + Math.round(high) + ' sq ft.';
+          return;
+        }
+      }
+      const body = {
+        target_sqft: targetSqft,
+        city_name: getSelectedCity(),
+        zip_code: zip || null,
+        limit: Math.min(10000, Math.max(1, limit)),
+      };
+      if (maxYear) {
+        const y = parseInt(maxYear, 10);
+        if (!isNaN(y)) body.max_year_built = y;
+      }
+      if (hasMin) body.min_living_sq_ft = minVal;
+      else if (!hasMax) {
+        body.min_living_sq_ft = targetSqft * 0.85;
+        body.max_living_sq_ft = targetSqft * 1.15;
+      }
+      if (hasMax) body.max_living_sq_ft = maxVal;
+      const btn = document.getElementById('btn-target-pipeline');
+      btn.disabled = true;
+      sumEl.textContent = 'Loading…';
+      try {
+        const res = await apiPost('/decisions/target-pipeline-summary', body);
+        const fmt = (n) => (n != null && typeof n === 'number') ? '$' + Math.round(n).toLocaleString() : '—';
+        sumEl.innerHTML = '<strong>' + res.parcel_count + '</strong> parcel(s) qualify. ' +
+          'Total value created: <strong>' + fmt(res.total_value_created) + '</strong>. ' +
+          'Existing value (sum): ' + fmt(res.total_existing_value) + '. ' +
+          'New-build value (sum): ' + fmt(res.total_new_build_value) + '. ' +
+          'Parcels with sale: ' + (res.parcels_with_sale ?? 0) + '. ' +
+          'ZIPs with benchmark: ' + (res.zips_with_benchmark ?? 0) + '.';
+      } catch (e) {
+        sumEl.textContent = '';
+        errEl.textContent = e.message || 'Request failed.';
+      } finally {
+        btn.disabled = false;
+      }
+    });
+
+    // 9) Rebuild – Portfolio
+    document.getElementById('btn-portfolio-rank').addEventListener('click', async () => {
+      const errEl = document.getElementById('portfolio-error');
+      const sumEl = document.getElementById('portfolio-summary');
+      const tableWrap = document.getElementById('portfolio-table-wrap');
+      errEl.textContent = '';
+      sumEl.textContent = '';
+      tableWrap.innerHTML = '';
+      const raw = document.getElementById('portfolio-ids').value?.trim() || '';
+      const ids = raw.split(/[\s,]+/).map(s => parseInt(s, 10)).filter(n => !isNaN(n) && n > 0);
+      const targetSqft = parseFloat(document.getElementById('portfolio-target-sqft').value);
+      if (!ids.length || isNaN(targetSqft) || targetSqft <= 0) {
+        errEl.textContent = 'Enter at least one Property ID and target size.';
+        return;
+      }
+      const btn = document.getElementById('btn-portfolio-rank');
+      btn.disabled = true;
+      sumEl.textContent = 'Loading…';
+      try {
+        const rows = await apiPost('/decisions/portfolio-rank', {
+          property_ids: ids.slice(0, 200),
+          target_sqft: targetSqft,
+          product_type: 'SINGLE FAMILY RESIDENCE'
+        });
+        const passCount = rows.filter(r => r.pass_fail).length;
+        sumEl.textContent = rows.length + ' parcels ranked. Pass: ' + passCount + ', Fail: ' + (rows.length - passCount) + '.';
+        tableWrap.innerHTML = '<table><thead><tr><th>Property ID</th><th>Pass/Fail</th><th>Reasons</th><th>Expected price</th><th>Margin %</th><th>Comps</th><th>Confidence</th><th>Low conf.</th></tr></thead><tbody>' +
+          rows.map(r => '<tr><td>' + r.property_id + '</td><td>' + (r.pass_fail ? 'Pass' : 'Fail') + '</td><td>' + (r.reason_codes && r.reason_codes.length ? r.reason_codes.join(', ') : '—') + '</td><td>' + (r.expected_p50_price != null ? '$' + Math.round(r.expected_p50_price).toLocaleString() : '—') + '</td><td>' + (r.scenario_base_margin_pct != null ? r.scenario_base_margin_pct + '%' : '—') + '</td><td>' + r.comp_count + '</td><td>' + (r.confidence_band || '—') + '</td><td>' + (r.low_confidence_flag ? 'Yes' : '') + '</td></tr>').join('') + '</tbody></table>';
+      } catch (e) {
+        sumEl.textContent = '';
+        errEl.textContent = e.message || 'Request failed.';
+      } finally {
+        btn.disabled = false;
       }
     });
   </script>

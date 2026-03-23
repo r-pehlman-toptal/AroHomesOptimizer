@@ -1,176 +1,60 @@
-# Week 3 Report – Zoning and feasibility foundations
+# Week 3 report – Comps, footprint, zoning and feasibility
 
-**Project:** Aro Homes – LA Market Expansion (Data-Driven Design)  
-**Period:** Week 3 of 8
-
----
-
-## Executive summary
-
-Week 3 established zoning and feasibility foundations for the LA market. We documented LA zoning sources and a field mapping from source data to constraint outputs (FAR, height, setbacks, parking). The feasibility module (`ZoningConstraintBuilder`) joins parcel + zoning and produces a constraints table (`max_gfa_estimate`, `max_height_ft`, `min_parking_spaces`, `max_units`) using a zone-code lookup until LAMC/staging data exists. Geometry coverage (valid `center_point`, SRID) is documented and scripted for validation when the DB is available. Eight feature deliverables were implemented or stubbed: zoning summary, explainable comps, inspection questions by year, proximity to essentials, setback/height/FAR summary, ADU feasibility check, nearby zoning, and the geometry-coverage note. Key decisions (one zone per parcel, placeholder lookup, WGS84 center_point) are locked; risks around fan-out, duplicates, sparse comps, and boundary definition are captured with mitigations below.
+**Focus:** Data comps (selection, aggregates, confidence); parcel/lot footprint (orientation-free ratio, data quality, lot-size buckets); zoning and feasibility (constraints, nearby zoning, setback/FAR summary, ADU stub, proximity, inspection questions); geometry coverage.
 
 ---
 
-## What I delivered
+## 1. Comps (comparable sales)
 
-- **Zoning source list and field mapping** — `docs/zoning-source-and-field-mapping.md`: LA sources (LAMC, ZIMAS, LA City Zoning GIS), current DB state (property_zoning, zone), gap (no constraint columns), and mapping to feasibility outputs.  
-  - *Acceptance:* Doc exists; mapping table covers max_gfa_estimate, max_height_ft, min_parking_spaces, max_units, setbacks.
+- **F1 Comps** (`POST /queries/f1/comps`): Comparable sales by ZIP and year; each row includes `comp_count` and `confidence_band`. Used for “show me the evidence” and as the basis for confidence summary in the UI.
+- **Comps aggregate** (`POST /queries/comps-aggregate`, `POST /queries/comps-aggregate-rows`): Subject-based comps (property ID + living sq ft) with distance and recency; 12‑month window, optional size band (±20%), distance cap (e.g. 2 mi). Returns aggregate metrics (comp_count, median_ppsf, p25/p50/p75, IQR, median_dom) and per-comp rows with `dist_miles`, `months_ago`, weight.
+- **Confidence:** Four signals (coverage, proximity, recency, tightness) combined into a 0–1 score and band (High / Medium / Low). Diagnostics (e.g. median months ago, % within 0.25 mi, match rate, IQR, spread ratio) are returned so the UI can explain why confidence is low or high.
+- **Explainable comps:** Short text (“same ZIP/cell, same year, similar size; N comps”) generated via `explain_comps_text()` for display in the UI.
+- **UI:** Property panel shows comps table, PPSF histogram with p25/p50/p75, confidence band and score, and the “Why” diagnostics; expected PPSF and upside score; speed-to-sell (median DOM). F1 Comps card shows comps by ZIP/year with cohort size and confidence.
 
-- **Feasibility module (ZoningConstraintBuilder)** — `src/feasibility/zoning_constraints.py`: joins parcel + zoning (one zone per parcel), applies default LA zone lookup, outputs constraints. `scripts/build_constraints.py` loads parcel_gold (LA), property_zoning + zone from DB, runs builder, writes CSV.  
-  - *Acceptance:* Builder builds constraints from DataFrames; `python scripts/build_constraints.py --limit 1000` runs and writes CSV when DB available.
-
-- **Geometry coverage note** — `notes/geometry-coverage-note.md` and `scripts/check_geometry_coverage.py`: metrics (total parcels, valid center_point count, coverage %, SRID), risks, and run instructions.  
-  - *Acceptance:* Note exists; script runs when DB available and prints summary.
-
-- **Eight Week 3 features** — Each with doc in `docs/features/W3_*.md` and code/SQL as below:
-
-  | # | Feature | Deliverable |
-  |---|---------|-------------|
-  | 1 | Zoning summary | `sql/readonly/zoning_summary.sql`; `POST /queries/zoning-summary` |
-  | 2 | Explainable comps | `src/query_service/explain_comps.py` — `explain_comps_text()` |
-  | 3 | Inspection questions by year built | `data/inspection_questions_by_year.yaml`; `src/feasibility/inspection_questions.py` |
-  | 4 | Proximity to essentials | `sql/readonly/parcel_center_point.sql`; `POST /queries/parcel-center`; `src/feasibility/proximity.py` |
-  | 5 | Setback/height/FAR summary | `src/feasibility/constraint_summary.py` — `format_setback_height_far_summary()` |
-  | 6 | ADU feasibility check | `src/feasibility/adu.py` — `check_adu_feasibility()` (stub) |
-  | 7 | Nearby zoning display | `sql/readonly/nearby_zoning.sql`; `POST /queries/nearby-zoning` |
-  | 8 | Geometry coverage note | See above |
-
-- **Week 3 report** — This document (single merged deliverable).
+**References:** `docs/features/how_much_aggregate.md`, `docs/tableau/visualization_ladder.md`, `docs/features/W3_explainable_comps.md`, `src/query_service/comps_confidence.py`, `sql/readonly/comps_aggregate.sql`, `comps_aggregate_rows.sql`.
 
 ---
 
-## Key decisions + definitions locked
+## 2. Footprint (parcel / lot shape)
 
-- **One zone per parcel (for constraints):** Builder uses a single zone per parcel (first from join). Primary-zone or worst-case logic can be added later; for now behavior is defined and consistent.
-- **Zone lookup is placeholder:** Default R1/R2/RS/RE/RM values are typical LA placeholders. Replace with LAMC-derived or `staging_zoning` when available; interface (zone code → constraints) stays the same.
-- **Constraint fields:** `max_gfa_estimate` (FAR × lot_size_sq_ft), `max_height_ft`, `min_parking_spaces`, `max_units`; setbacks and lot coverage mapped in doc for future use.
-- **Center point / SRID:** `property_geometry.center_point` is WGS84 (SRID 4326). Analytics/grid use `ST_Transform(..., 3310)` for California Albers; consistency checked by geometry-coverage script.
-- **Parcel driver:** `parcel_gold` driven by property_address; one row per property_id for constraints and coverage stats.
+- **Parcel footprint** (`POST /queries/parcel-footprint`): For one property, returns lot dimensions, **orientation-free aspect_ratio** (max(width,depth)/min(width,depth), ≥ 1) and **ratio_band**: balanced (1.0–1.3), moderate (1.3–2.0), extreme (>2.0). **Width = frontage** (vendor_lot_width_ft), **depth = lot depth** (vendor_lot_depth_ft). **Data quality:** `width_source`, `depth_source` (vendor | inferred), `is_valid_dimensions`, `notes`. Response is always one row; when dimensions are missing or invalid, `is_valid_dimensions` is false and `notes` explains (e.g. “width missing or zero”).
+- **Lot size buckets** (`POST /queries/lot-size-buckets`): Width/depth bucket counts by ZIP (configurable bucket size). Optional filters: **property_subtype** (e.g. SFR), **min_lot_size_sq_ft**, **max_lot_size_sq_ft**, **exclude_outliers** (10–250 ft) so distributions are not skewed by non-residential or odd parcels.
+- **Analytics lot heatmap:** `POST /analytics/run/lot-heatmap` with `bucket_mode: "width_depth"`; results stored in `analytics_lot_heatmap` for dashboards.
+- **UI:** Property card shows footprint (width×depth, band, aspect) when valid, or notes/sources when invalid. Comps section shows “Subject lot: W×D ft (band). Focus on home footprint for ideal economics.” F1 Comps card has “Lot footprint distribution (this ZIP)” for top width×depth buckets.
 
----
-
-## Risks + mitigations
-
-| Risk | Mitigation |
-|------|------------|
-| **Fan-out** (one parcel → many zones, or many comps) | Constraint builder and zoning summary use one zone per parcel (DISTINCT ON / first). Comps and explainability use existing F1 response; no new fan-out in Week 3. |
-| **Duplicates** (same parcel/zone repeated) | Read-only SQL uses `DISTINCT ON (property_id)` for address, geometry, and zoning; APIs return one row per parcel for zoning summary and parcel-center. |
-| **Sparse comps** (few or no comps in some areas) | Explainable comps and confidence stay on existing F1 data; UI can derive message from comp_count + confidence_band. No separate sparse-comps endpoint; monitor in Week 4 submarket/archetype work. |
-| **Boundary definition** (parcel vs submarket vs grid) | Parcel = property_id (parcel_gold). Submarket and grid boundaries are Week 4 scope; geometry coverage note and center_point validity feed into that. |
-| **DB required** | Build and geometry scripts need DB_URL and gold views; they fail cleanly or no-op without DB. Verification checkboxes updated when DB is run. |
-| **Low geometry coverage** | Parcels without valid center_point are excluded from grid and distance-based features; coverage % and script documented so backfill or approximation can be prioritized. |
+**References:** `docs/footprint-and-lot-data.md`, `sql/readonly/parcel_footprint.sql`, `src/query_service/queries.py` (`parcel_footprint`, `lot_size_buckets`), `src/query_service/schemas.py` (`ParcelFootprintRow`, `LotSizeBucketsParams`).
 
 ---
 
-## Next week plan + explicit asks
+## 3. Summary (comps and footprint)
 
-- **Week 4:** Submarket and archetype work; zoning and geometry coverage inform both. Feasibility constraints and ZoningConstraintBuilder feed feature tables for modeling (Week 5).
-- **Explicit asks:**  
-  - Run `python scripts/build_constraints.py --limit 1000` and `python scripts/check_geometry_coverage.py` when DB is available and tick verification in this report.  
-  - Confirm preference on one-zone-per-parcel vs primary/worst-case before expanding zoning data.
+Week 3 delivered: (1) **comps** – subject-based comps, confidence score and diagnostics, explainable comps text, and UI for comps + histogram + confidence; (2) **footprint** – orientation-free aspect_ratio and bands, data quality fields, optional filters on lot-size-buckets, and UI for subject lot and ZIP lot distribution. Documentation is in the referenced docs and in `docs/footprint-and-lot-data.md` (including scope for the heatmap and the “ideal economics” next step).
 
 ---
 
-## Appendix: SQL snippets / implementation details
+## 4. Zoning and feasibility
 
-### Zoning summary (one parcel)
+- **Zoning summary** (`POST /queries/zoning-summary`): One parcel → zone_code, lot_size_sq_ft, max_gfa_estimate, max_height_ft, min_parking_spaces, max_units. Uses property_zoning + zone and applies LA zone-code lookup (R1, R2, RS, RE, RM) in `src/feasibility/zoning_constraints.py` and `queries.py`.
+- **Nearby zoning** (`POST /queries/nearby-zoning`): Subject parcel + other parcels in same ZIP with zone_code and is_subject; supports “Subject: R1” and “Nearby: R1, R2, …” in UI.
+- **Setback/height/FAR summary:** `format_setback_height_far_summary()` in `src/feasibility/constraint_summary.py` formats zoning-summary (and optional setbacks) as one-line text for display.
+- **ADU feasibility:** Stub in `src/feasibility/adu.py` (`check_adu_feasibility()`); returns status="stub" until LA ADU rules are in DB/code.
+- **Proximity to essentials:** `POST /queries/parcel-center` returns parcel lon/lat; `src/feasibility/proximity.py` provides `distances_to_pois()` and `nearest_poi_stub()`; external POI (groceries, hospitals, parks) required for live distances.
+- **Inspection questions by year built:** `src/feasibility/inspection_questions.py` with `data/inspection_questions_by_year.yaml`; `get_inspection_questions(year_built)` and `get_inspection_band_label(year_built)` for UI.
 
-```sql
--- sql/readonly/zoning_summary.sql
--- Parameter: :parcel_id
-WITH
-addr_one AS (
-  SELECT DISTINCT ON (a.property_id) a.property_id, a.street_id
-  FROM property_address a ORDER BY a.property_id, a.street_id
-),
-geom_one AS (
-  SELECT DISTINCT ON (pg.property_id) pg.property_id, pg.lot_size_sq_ft
-  FROM property_geometry pg ORDER BY pg.property_id
-),
-zoning_one AS (
-  SELECT DISTINCT ON (pz.property_id) pz.property_id, z.name AS zone_code
-  FROM property_zoning pz JOIN zone z ON z.id = pz.zone_id ORDER BY pz.property_id
-)
-SELECT p.property_id AS parcel_id, z.zone_code, g.lot_size_sq_ft
-FROM addr_one p
-LEFT JOIN zoning_one z ON z.property_id = p.property_id
-LEFT JOIN geom_one g ON g.property_id = p.property_id
-WHERE p.property_id = :parcel_id;
-```
-
-### Nearby zoning (subject + others in same ZIP)
-
-```sql
--- sql/readonly/nearby_zoning.sql
--- Parameters: :parcel_id, :limit
-WITH addr_one AS (
-  SELECT DISTINCT ON (a.property_id) a.property_id, a.zip_code
-  FROM property_address a ORDER BY a.property_id
-),
-subject_zip AS ( SELECT zip_code FROM addr_one WHERE property_id = :parcel_id LIMIT 1 ),
-zoning_one AS (
-  SELECT DISTINCT ON (pz.property_id) pz.property_id, z.name AS zone_code
-  FROM property_zoning pz JOIN zone z ON z.id = pz.zone_id ORDER BY pz.property_id
-),
-parcels_in_zip AS (
-  SELECT a.property_id AS parcel_id, a.zip_code FROM addr_one a JOIN subject_zip s ON s.zip_code = a.zip_code
-),
-with_zone AS (
-  SELECT p.parcel_id, p.zip_code, z.zone_code FROM parcels_in_zip p LEFT JOIN zoning_one z ON z.property_id = p.parcel_id
-)
-SELECT parcel_id, zip_code, zone_code, (parcel_id = :parcel_id) AS is_subject
-FROM with_zone ORDER BY is_subject DESC, parcel_id LIMIT :limit;
-```
-
-### Parcel center point (proximity)
-
-```sql
--- sql/readonly/parcel_center_point.sql
--- Parameter: :parcel_id
-SELECT pg.property_id AS parcel_id,
-  ST_X(pg.center_point::geometry) AS longitude,
-  ST_Y(pg.center_point::geometry) AS latitude
-FROM property_geometry pg
-WHERE pg.property_id = :parcel_id
-  AND pg.center_point IS NOT NULL AND ST_IsValid(pg.center_point::geometry);
-```
-
-### Lot heatmap query (analytics)
-
-Core query used in `run_lot_heatmap_job` (`src/analytics/jobs.py`) to bucket parcels by ZIP and lot dimensions/size, then persisted to `analytics_lot_heatmap`:
-
-```sql
-WITH address_uniq AS (
-    SELECT pa.property_id, MIN(pa.zip_code) AS zip_code
-    FROM property_address AS pa
-    GROUP BY pa.property_id
-),
-geom AS (
-    SELECT pg.property_id, pg.vendor_lot_width_ft, pg.vendor_lot_depth_ft, pg.lot_size_sq_ft
-    FROM property_geometry AS pg
-),
-joined AS (
-    SELECT a.zip_code, g.vendor_lot_width_ft, g.vendor_lot_depth_ft, g.lot_size_sq_ft
-    FROM geom AS g
-    JOIN address_uniq AS a ON g.property_id = a.property_id
-    WHERE a.zip_code IS NOT NULL
-)
-SELECT
-    zip_code,
-    CASE WHEN :bucket_mode = 'width_depth' AND vendor_lot_width_ft IS NOT NULL AND vendor_lot_width_ft > 0
-         THEN FLOOR(vendor_lot_width_ft / :width_bucket_ft)::int * :width_bucket_ft ELSE NULL END AS width_bucket_ft,
-    CASE WHEN :bucket_mode = 'width_depth' AND vendor_lot_depth_ft IS NOT NULL AND vendor_lot_depth_ft > 0
-         THEN FLOOR(vendor_lot_depth_ft / :depth_bucket_ft)::int * :depth_bucket_ft ELSE NULL END AS depth_bucket_ft,
-    CASE WHEN :bucket_mode = 'lot_size' AND lot_size_sq_ft IS NOT NULL AND lot_size_sq_ft > 0
-         THEN FLOOR(lot_size_sq_ft / :lot_size_bucket_sqft)::int * :lot_size_bucket_sqft ELSE NULL END AS lot_size_bucket_sqft,
-    COUNT(*) FILTER (WHERE (...)) AS lot_count,
-    COUNT(*) FILTER (WHERE ...) AS missing_geom_count
-FROM joined
-GROUP BY zip_code, width_bucket_ft, depth_bucket_ft, lot_size_bucket_sqft;
-```
-
-Full logic and INSERT into `analytics_lot_heatmap` (scope, market_name, geo_unit_type, geo_unit_value, bucket columns, lot_count): `src/analytics/jobs.py` lines 26–130.
+**References:** `docs/features/W3_zoning_summary.md`, `docs/features/W3_nearby_zoning.md`, `docs/features/W3_setback_height_far_summary.md`, `docs/features/W3_adu_feasibility.md`, `docs/features/W3_proximity_to_essentials.md`, `docs/features/W3_inspection_questions.md`, `docs/zoning-source-and-field-mapping.md`, `src/feasibility/zoning_constraints.py`, `sql/readonly/zoning_summary.sql`, `sql/readonly/nearby_zoning.sql`.
 
 ---
 
-*Update verification checkboxes when DB is run; save as `docs/week3-report.md`.*
+## 5. Geometry coverage
+
+- **Note:** `notes/geometry-coverage-note.md` documents % parcels with valid center_point and SRID consistency for parcel_gold / property_geometry.
+- **Script:** `scripts/check_geometry_coverage.py` prints coverage and SRIDs when run against the DB.
+
+**References:** `docs/features/W3_geometry_coverage_note.md`, `notes/geometry-coverage-note.md`, `scripts/check_geometry_coverage.py`.
+
+---
+
+## 6. Week 3 completion summary
+
+Week 3 is complete. Delivered: **(1) comps** – subject-based comps, confidence and explainable text, UI; **(2) footprint** – aspect_ratio and bands, data quality, lot-size-buckets and UI; **(3) zoning and feasibility** – zoning summary and nearby zoning APIs, constraint formatter, ADU stub, proximity helpers, inspection questions by year built; **(4) geometry coverage** – note and check script. All eight Week 3 features are implemented (as stubs where noted). Zoning mapping is in `docs/zoning-source-and-field-mapping.md`; feasibility module in `src/feasibility/`; Week 3 report is this document.

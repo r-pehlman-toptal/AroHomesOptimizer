@@ -76,6 +76,15 @@ def main():
     else:
         print("city_year: skip (file not found)")
 
+    # 4) Optional: grid_year (depends on analytics schema: mv_agg_grid_year_ppsf_025, grid_cells_025)
+    path = agg_dir / "grid_year.sql"
+    if path.exists():
+        try:
+            t = run_sql_file(conn, path)
+            print(f"grid_year: {t:.2f}s")
+        except Exception as e:
+            print(f"grid_year: skip ({e})")
+
     conn.close()
     print(f"total: {time.perf_counter() - total_start:.2f}s")
 

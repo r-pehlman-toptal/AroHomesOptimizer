@@ -294,7 +294,6 @@ Assumes ~20 hrs/week; adjust scope if capacity differs.
 | Stakeholder walkthrough: present insights, playbook, live demo of scenario/optimization | Walkthrough completed; feedback captured |
 | Capture Phase 2 backlog (e.g. cost model, real cost data, customer preference research, more zoning, dashboard) | **Phase 2 backlog** (list or doc) |
 | Write Week 8 report | **Week 8 report** |
-
 **Features (8):**
 1. **Confidence + coverage documentation** – How confidence_band and tier fallback work; when to trust the estimate.
 2. **Data freshness indicators** – Document or expose "last refreshed" for MVs.
