@@ -1,4 +1,6 @@
 -- Suggested indexes to support Query Service performance.
+-- Run: psql $DATABASE_URL -f sql/maintenance/query_service_indexes.sql
+-- The spatial index (idx_property_geometry_center_3310) is critical for comps-aggregate; without it the query can take 40+ minutes.
 
 -- mls_history
 CREATE INDEX IF NOT EXISTS idx_mls_history_use_sold_date
@@ -46,4 +48,9 @@ CREATE INDEX IF NOT EXISTS idx_zone_name
 -- geometry
 CREATE INDEX IF NOT EXISTS idx_property_geometry_property_id
     ON property_geometry (property_id);
+
+-- Spatial index for comps-aggregate: ST_DWithin(transform(center_point), subject, radius).
+-- Requires PostGIS. Speeds up comps-aggregate from minutes to seconds.
+CREATE INDEX IF NOT EXISTS idx_property_geometry_center_3310
+    ON property_geometry USING GIST (ST_Transform(center_point::geometry, 3310));
 

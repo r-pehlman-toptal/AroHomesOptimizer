@@ -49,6 +49,13 @@
 |-------|-------------|-------------|-------|
 | `property_geometry` | — | `property_id`, `center_point`, `vendor_lot_width_ft`, `vendor_lot_depth_ft`, `lot_size_sq_ft` | Use DISTINCT ON (property_id) for one geometry per property; `center_point` for mapping/grid (transform to EPSG:3310 for grid). |
 
+### 2.5 Property and assessor (tax)
+
+| Table | Primary key | Key columns | Notes |
+|-------|-------------|-------------|-------|
+| `property` | `id` | `apn`, `tax_id`, `last_update`, `external_update` | One row per parcel. **property.apn has hyphens** (e.g. `2004-013-025`). Use **APN only** to link to assessor data; do not use tax_id for assessor–property linkage. |
+| `assessor_parcel` | `id` | `apn`, `roll_year`, `year_built`, `square_footage`, `land_value`, `improvement_value`, `total_value`, `location_latitude`, `location_longitude`, … | LA County Assessor Parcel (tax) data. **Join to property on `property.apn = assessor_parcel.apn`.** Source: Parcel_Data_2021 (etc.); load with `apn` = CSV “Assessor ID” (hyphenated). |
+
 ---
 
 ## 3. Join paths (gold and analytics)
@@ -63,6 +70,9 @@
 
 - **Analytics fact (one row per sale, LA only):**  
   `mls_history` JOIN address_one JOIN street_city LEFT JOIN geom_one; filter `city_name = 'LOS ANGELES'`, `sold_price > 0`, `living_sq_ft > 0`.
+
+- **Property ↔ assessor (tax):**  
+  `property` JOIN `assessor_parcel` ON `property.apn = assessor_parcel.apn` (apn has hyphens; use Assessor ID from Parcel CSV as apn).
 
 ---
 

@@ -20,7 +20,7 @@ base AS (
     AND h.sold_date IS NOT NULL
     AND h.sold_date >= DATE '2020-01-01'
     AND (h.sold_price / NULLIF(h.living_sq_ft, 0)) >= :ppsf_min
-    AND UPPER(TRIM(sc.city_name)) = 'LOS ANGELES'
+    AND UPPER(TRIM(sc.city_name)) = UPPER(TRIM(:city_name))
     AND a.zip_code = :zip_code
     AND EXTRACT(YEAR FROM h.sold_date) = :sale_year
 ),
