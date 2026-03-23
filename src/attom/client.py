@@ -15,6 +15,7 @@ from typing import Any, Dict, List, Optional
 
 
 ATTOM_BASE = "https://api.gateway.attomdata.com/propertyapi/v1.0.0"
+MIN_VALID_PPSF = 400.0
 
 
 def _get_api_key() -> Optional[str]:
@@ -1192,6 +1193,7 @@ def _percentile(sorted_values: List[float], pct: float) -> Optional[float]:
 def fetch_new_build_benchmark_attom(
     zip_code: str,
     min_year_built: int = 2020,
+    min_ppsf: float = MIN_VALID_PPSF,
     property_type: str = "SINGLE FAMILY RESIDENCE",
     page_size: int = 100,
 ) -> Dict[str, Any]:
@@ -1275,7 +1277,7 @@ def fetch_new_build_benchmark_attom(
 
         if sale_amt and sale_amt > 0 and living_sq_ft and living_sq_ft > 0:
             ppsf = sale_amt / living_sq_ft
-            if ppsf >= 100:  # Filter out data anomalies (below $100/sqft)
+            if ppsf >= min_ppsf:  # Keep comps above configured PPSF floor.
                 ppsf_values.append(round(ppsf, 2))
 
         # Days on market
@@ -1294,9 +1296,9 @@ def fetch_new_build_benchmark_attom(
     sale_count = len(ppsf_values)
     has_new_builds = sale_count > 0
     note = (
-        f"{sale_count} new-build sale(s) with PPSF data found in ZIP {zip_code} (year_built ≥ {min_year_built})."
+        f"{sale_count} new-build sale(s) with PPSF data found in ZIP {zip_code} (year_built ≥ {min_year_built}, PPSF ≥ {round(min_ppsf)})."
         if has_new_builds
-        else f"No new-build sales found in ZIP {zip_code} (year_built ≥ {min_year_built}). Negative signal for this area."
+        else f"No new-build sales found in ZIP {zip_code} (year_built ≥ {min_year_built}, PPSF ≥ {round(min_ppsf)}). Negative signal for this area."
     )
 
     return {
@@ -1439,7 +1441,7 @@ def fetch_new_build_properties_for_map(
         ppsf = None
         if sale_amt and sale_amt > 0 and living_sq_ft and living_sq_ft > 0:
             raw_ppsf = sale_amt / living_sq_ft
-            if raw_ppsf >= 100:
+            if raw_ppsf >= MIN_VALID_PPSF:
                 ppsf = round(raw_ppsf, 2)
 
         out_list.append({
@@ -1552,6 +1554,7 @@ def fetch_product_mix_attom(
     side_setback_ft: float = 5.0,
     benchmark_zip_code: Optional[str] = None,
     min_year_built_comps: int = 2020,
+    min_ppsf_comps: float = MIN_VALID_PPSF,
     page_size: int = 200,
 ) -> Dict[str, Any]:
     """
@@ -1619,7 +1622,11 @@ def fetch_product_mix_attom(
     # ── 2. New-build PPSF benchmark ───────────────────────────────────────────
     bmark_zip = (benchmark_zip_code or "").strip() or (zip_code or "").strip()
     if bmark_zip:
-        benchmark = fetch_new_build_benchmark_attom(bmark_zip, min_year_built=min_year_built_comps)
+        benchmark = fetch_new_build_benchmark_attom(
+            bmark_zip,
+            min_year_built=min_year_built_comps,
+            min_ppsf=min_ppsf_comps,
+        )
     else:
         benchmark = {
             "median_ppsf": None, "p25_ppsf": None, "p75_ppsf": None,
@@ -1698,10 +1705,37 @@ def fetch_product_mix_attom(
         best_qty = max(product_rows, key=lambda r: r["buildable_count"])
         best_qty["is_optimal"] = True
 
+    export_properties = []
+    for p in properties:
+        export_properties.append({
+            "attom_id": p.get("attom_id"),
+            "address": p.get("address"),
+            "zip_code": p.get("zip_code"),
+            "lat": p.get("lat"),
+            "lon": p.get("lon"),
+            "year_built": p.get("year_built"),
+            "living_sq_ft": p.get("living_sq_ft"),
+            "lot_sq_ft": p.get("lot_sq_ft"),
+            "lot_width_ft": p.get("lot_width_ft"),
+            "lot_depth_ft": p.get("lot_depth_ft"),
+            "buildable_width_ft": p.get("buildable_width_ft"),
+            "buildable_depth_ft": p.get("buildable_depth_ft"),
+            "buildable_sq_ft": p.get("buildable_sq_ft"),
+            "buildable_notes": p.get("buildable_notes"),
+            "fits_target": p.get("fits_target"),
+            "avm_value": p.get("avm_value"),
+            "last_sale_amount": p.get("last_sale_amount"),
+            "existing_value": p.get("existing_value"),
+            "existing_value_source": p.get("existing_value_source"),
+        })
+
     return {
         "error": None,
         "area_label": area_label,
         "total_scanned": len(properties),
+        "benchmark_zip_code": bmark_zip or None,
+        "min_year_built_comps": min_year_built_comps,
+        "min_ppsf_comps": min_ppsf_comps,
         "existing_value_sources": sorted(ev_sources),  # e.g. ["bulk_avm", "last_sale"]
         "new_build_benchmark": {
             "median_ppsf": benchmark.get("median_ppsf"),
@@ -1712,6 +1746,7 @@ def fetch_product_mix_attom(
             "note": benchmark.get("note", ""),
         },
         "products": product_rows,
+        "properties": export_properties,
         "filters": sites.get("filters"),
     }
 
@@ -1729,6 +1764,7 @@ def fetch_value_accretion_heatmap_attom(
     rear_setback_ft: float = 20.0,
     side_setback_ft: float = 5.0,
     min_year_built_comps: int = 2020,
+    min_ppsf_comps: float = MIN_VALID_PPSF,
     page_size: int = 200,
 ) -> Dict[str, Any]:
     """
@@ -1821,7 +1857,11 @@ def fetch_value_accretion_heatmap_attom(
 
     # ── 4. Parallel new-build PPSF lookup per ZIP ─────────────────────────────
     def _get_zip_benchmark(z: str) -> tuple:
-        result = fetch_new_build_benchmark_attom(z, min_year_built=min_year_built_comps)
+        result = fetch_new_build_benchmark_attom(
+            z,
+            min_year_built=min_year_built_comps,
+            min_ppsf=min_ppsf_comps,
+        )
         return z, result
 
     zip_ppsf: Dict[str, Optional[float]] = {}

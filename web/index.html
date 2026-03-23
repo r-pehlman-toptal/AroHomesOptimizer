@@ -577,6 +577,9 @@
         <label>Comps since
           <input type="number" id="pm-comps-year" value="2020" min="2000" max="2030" step="1" style="width:5.5rem;" />
         </label>
+        <label>Min PPSF
+          <input type="number" id="pm-min-ppsf" value="400" min="0" max="5000" step="10" style="width:5.5rem;" />
+        </label>
         <button type="button" class="primary" id="btn-ss-run" style="align-self:flex-end; margin-left:auto;">Run all</button>
       </div>
       <div id="ss-error" class="error"></div>
@@ -671,9 +674,14 @@
       <div class="card" style="margin-top:0.75rem; overflow-x:auto;">
         <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:0.5rem; margin-bottom:0.75rem;">
           <h3 style="font-size:0.95rem; margin:0;">Product comparison</h3>
-          <button type="button" id="btn-pm-download-csv" disabled style="padding:0.35rem 0.75rem; border-radius:6px; border:1px solid var(--border); background:var(--surface); color:var(--text); cursor:pointer; font-size:0.85rem;">
-            Download CSV
-          </button>
+          <div style="display:flex; align-items:center; gap:0.5rem;">
+            <button type="button" id="btn-pm-download-csv" disabled style="padding:0.35rem 0.75rem; border-radius:6px; border:1px solid var(--border); background:var(--surface); color:var(--text); cursor:pointer; font-size:0.85rem;">
+              Download product CSV
+            </button>
+            <button type="button" id="btn-pm-download-properties-csv" disabled style="padding:0.35rem 0.75rem; border-radius:6px; border:1px solid var(--border); background:var(--surface); color:var(--text); cursor:pointer; font-size:0.85rem;">
+              Download properties CSV
+            </button>
+          </div>
         </div>
         <table id="pm-table" style="width:100%; font-size:0.85rem; border-collapse:collapse;"></table>
       </div>
@@ -1416,10 +1424,12 @@
       const statusEl   = document.getElementById('pm-status');
       const resultsWrap = document.getElementById('pm-results-wrap');
       const btnPmCsv   = document.getElementById('btn-pm-download-csv');
+      const btnPmPropsCsv = document.getElementById('btn-pm-download-properties-csv');
       errEl.textContent = '';
       statusEl.textContent = 'Loading…';
       resultsWrap.style.display = '';
       btnPmCsv.disabled = true;
+      btnPmPropsCsv.disabled = true;
 
       const sizesRaw = document.getElementById('pm-target-sizes').value || '';
       const targetSizes = sizesRaw.split(',').map(s => parseInt(s.trim(), 10)).filter(n => n > 0 && n < 20000);
@@ -1427,18 +1437,21 @@
         errEl.textContent = 'Enter at least one target size.';
         statusEl.textContent = '';
         btnPmCsv.disabled = !pmLastData || !(pmLastData.products || []).length;
+        btnPmPropsCsv.disabled = !pmLastData || !(pmLastData.properties || []).length;
         return;
       }
       const benchZip  = (document.getElementById('pm-benchmark-zip').value || '').trim();
       const compsYear = parseInt(document.getElementById('pm-comps-year').value, 10) || 2020;
+      const minPpsfComps = parseFloat(document.getElementById('pm-min-ppsf').value);
 
       const body = { ...ssBaseBody(p), target_sizes: targetSizes, min_year_built_comps: compsYear };
+      body.min_ppsf_comps = Number.isFinite(minPpsfComps) ? minPpsfComps : 400;
       if (benchZip) body.benchmark_zip_code = benchZip;
       try {
         const res = await fetch(API + '/attom/product-mix', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-        if (!res.ok) { errEl.textContent = 'Request failed (' + res.status + ').'; statusEl.textContent = ''; btnPmCsv.disabled = !pmLastData || !(pmLastData.products || []).length; return; }
+        if (!res.ok) { errEl.textContent = 'Request failed (' + res.status + ').'; statusEl.textContent = ''; btnPmCsv.disabled = !pmLastData || !(pmLastData.products || []).length; btnPmPropsCsv.disabled = !pmLastData || !(pmLastData.properties || []).length; return; }
         const data = await res.json();
-        if (data.error) { errEl.textContent = data.error; statusEl.textContent = ''; btnPmCsv.disabled = !pmLastData || !(pmLastData.products || []).length; return; }
+        if (data.error) { errEl.textContent = data.error; statusEl.textContent = ''; btnPmCsv.disabled = !pmLastData || !(pmLastData.products || []).length; btnPmPropsCsv.disabled = !pmLastData || !(pmLastData.properties || []).length; return; }
         renderProductMix(data);
         const opt = (data.products || []).find(r => r.is_optimal);
         statusEl.textContent = opt ? '★ Optimal: ' + opt.target_sqft.toLocaleString() + ' sqft' : 'Done';
@@ -1446,6 +1459,7 @@
         errEl.textContent = e.message || 'Request failed';
         statusEl.textContent = '';
         btnPmCsv.disabled = !pmLastData || !(pmLastData.products || []).length;
+        btnPmPropsCsv.disabled = !pmLastData || !(pmLastData.properties || []).length;
       }
     }
 
@@ -1513,7 +1527,9 @@
       const errEl = document.getElementById('tss-error');
       errEl.textContent = '';
 
+      const minPpsfComps = parseFloat(document.getElementById('pm-min-ppsf').value);
       const body = { ...ssBaseBody(p), target_build_sq_ft: p.targetSqft };
+      body.min_ppsf_comps = Number.isFinite(minPpsfComps) ? minPpsfComps : 400;
       try {
         const res = await fetch(API + '/attom/value-accretion-map', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
         if (!res.ok) { errEl.textContent = (errEl.textContent ? errEl.textContent + ' ' : '') + 'Value baseline failed (' + res.status + ').'; return; }
@@ -1715,7 +1731,49 @@
       URL.revokeObjectURL(a.href);
     }
 
+    function productMixPropertiesToCsv(data) {
+      const nb = data.new_build_benchmark || {};
+      const f = data.filters || {};
+      const sb = f.assumed_setbacks || {};
+      const metaLines = [
+        '# product_mix_properties_export',
+        '# area_label,' + escapeCsvCell(data.area_label || ''),
+        '# total_scanned,' + escapeCsvCell(data.total_scanned),
+        '# filter_max_year_built,' + escapeCsvCell(f.max_year_built),
+        '# filter_living_sqft_range,' + escapeCsvCell(f.min_living_sq_ft) + '-' + escapeCsvCell(f.max_living_sq_ft),
+        '# filter_setbacks_ft,' + escapeCsvCell('front ' + (sb.front_setback_ft ?? 20) + ' rear ' + (sb.rear_setback_ft ?? 20) + ' side ' + (sb.side_setback_ft ?? 5)),
+        '# benchmark_zip_code,' + escapeCsvCell(data.benchmark_zip_code || ''),
+        '# min_year_built_comps,' + escapeCsvCell(data.min_year_built_comps),
+        '# min_ppsf_comps,' + escapeCsvCell(data.min_ppsf_comps),
+        '# new_build_median_ppsf,' + escapeCsvCell(nb.median_ppsf),
+        '# new_build_p25_ppsf,' + escapeCsvCell(nb.p25_ppsf),
+        '# new_build_p75_ppsf,' + escapeCsvCell(nb.p75_ppsf),
+        '# new_build_sale_count,' + escapeCsvCell(nb.sale_count),
+        '# new_build_has_signal,' + escapeCsvCell(nb.has_new_builds),
+      ];
+      const headers = [
+        'attom_id','address','zip_code','lat','lon','year_built','living_sq_ft',
+        'lot_sq_ft','lot_width_ft','lot_depth_ft','buildable_width_ft','buildable_depth_ft','buildable_sq_ft',
+        'buildable_notes','fits_target','avm_value','last_sale_amount','existing_value','existing_value_source'
+      ];
+      const rows = (data.properties || []).map(p => headers.map(h => escapeCsvCell(p[h])).join(','));
+      return '\uFEFF' + metaLines.join('\n') + '\n' + headers.join(',') + '\n' + rows.join('\n') + '\n';
+    }
+
+    function downloadProductMixPropertiesCsv() {
+      if (!pmLastData || !(pmLastData.properties || []).length) return;
+      const csv = productMixPropertiesToCsv(pmLastData);
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+      const a = document.createElement('a');
+      const stamp = new Date().toISOString().slice(0, 19).replace(/[:-]/g, '');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'product-mix-properties-' + stamp + '.csv';
+      a.click();
+      URL.revokeObjectURL(a.href);
+    }
+
     document.getElementById('btn-pm-download-csv').addEventListener('click', downloadProductMixCsv);
+    document.getElementById('btn-pm-download-properties-csv').addEventListener('click', downloadProductMixPropertiesCsv);
 
     function renderProductMix(data) {
       const fmt$ = v => v != null ? '$' + Math.round(v).toLocaleString() : '—';
@@ -1764,6 +1822,7 @@
 
       pmLastData = data;
       document.getElementById('btn-pm-download-csv').disabled = !(data.products || []).length;
+      document.getElementById('btn-pm-download-properties-csv').disabled = !(data.properties || []).length;
 
       // Dual-axis chart
       if (chartPm) { chartPm.destroy(); chartPm = null; }
