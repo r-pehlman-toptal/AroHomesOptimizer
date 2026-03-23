@@ -7,9 +7,16 @@ from sqlalchemy.engine import Connection
 
 from src.api.dependencies import db_connection_dependency, cognito_auth_dependency
 from src.query_service import queries
+from src.attom.client import fetch_rebuild_features
 from src.query_service.schemas import (
+    AddressLookupParams,
+    AddressLookupRow,
     BedBathDistributionParams,
     BedBathDistributionRow,
+    AttomImprovementLot,
+    RebuildEvalCompsEconomics,
+    RebuildEvalParams,
+    RebuildEvalResponse,
     PrincipalZoneParams,
     PrincipalZoneRow,
     LotSizeBucketsParams,
@@ -51,6 +58,12 @@ from src.query_service.schemas import (
     VolumeByCityYearRow,
     VolumeByZipMonthParams,
     VolumeByZipMonthRow,
+    RegionLotSizesParams,
+    RegionLotSizesRow,
+    RegionHomeSizesParams,
+    RegionHomeSizesRow,
+    RegionHomeLotSizesParams,
+    RegionHomeLotSizesRow,
 )
 
 router = APIRouter(
@@ -213,6 +226,129 @@ def api_property_info(
     Use to pre-fill subject when selecting a property by ID.
     """
     return queries.property_info(conn, params)
+
+
+@router.post("/address-lookup", response_model=List[AddressLookupRow])
+def api_address_lookup(
+    params: AddressLookupParams,
+    conn: Connection = Depends(db_connection_dependency),
+) -> List[AddressLookupRow]:
+    """
+    Resolve address text to up to 5 candidate property_ids.
+    Numeric address_text is treated as property_id; otherwise provide zip_code and/or city_name.
+    """
+    return queries.address_lookup(conn, params)
+
+
+@router.post("/rebuild-eval", response_model=RebuildEvalResponse)
+def api_rebuild_eval(
+    params: RebuildEvalParams,
+    conn: Connection = Depends(db_connection_dependency),
+) -> RebuildEvalResponse:
+    """
+    Rebuild evaluation: resolve address, then property info, parcel footprint, zoning, comps.
+    Returns feasibility_fit (max_gfa, fits_target_sq_ft) and comps_economics. is_valid=false when data missing.
+    When MLS has no sale (existing_value null), falls back to Attom suggested_existing_value if resolved_address is set.
+    """
+    result = queries.rebuild_eval(conn, params)
+    # Attom: existing_value fallback when MLS has no sale, and improvement + lot for Rebuild tab
+    if result.resolved_address:
+        try:
+            attom = fetch_rebuild_features(result.resolved_address.strip(), target_living_sq_ft=params.target_living_sq_ft)
+        except Exception:
+            attom = {}
+        feats = attom.get("rebuild_features") or {}
+        updates = {}
+        # Fallback existing_value when MLS null
+        if (
+            result.comps_economics is not None
+            and result.comps_economics.existing_value is None
+        ):
+            ev = feats.get("suggested_existing_value")
+            if ev is not None:
+                try:
+                    ev_float = float(ev)
+                except (TypeError, ValueError):
+                    ev_float = None
+                if ev_float is not None:
+                    base = result.comps_economics.newbuild_value_base
+                    value_accretion = (base - ev_float) if base is not None else None
+                    try:
+                        updates["comps_economics"] = RebuildEvalCompsEconomics(
+                            **(
+                                result.comps_economics.model_dump()
+                                | {"existing_value": ev_float, "existing_value_source": "attom", "value_accretion": value_accretion}
+                            )
+                        )
+                    except Exception:
+                        pass
+        # Attom improvement + lot for UI (next to DB property_info/footprint)
+        def _safe_int(v):
+            if v is None:
+                return None
+            try:
+                return int(float(v))
+            except (TypeError, ValueError):
+                return None
+
+        def _safe_float(v):
+            if v is None:
+                return None
+            try:
+                return float(v)
+            except (TypeError, ValueError):
+                return None
+
+        if any(feats.get(k) is not None for k in ("living_sq_ft", "year_built", "beds", "baths", "lot_sq_ft")):
+            try:
+                updates["attom_improvement_lot"] = AttomImprovementLot(
+                    living_sq_ft=_safe_float(feats.get("living_sq_ft")),
+                    year_built=_safe_int(feats.get("year_built")),
+                    beds=_safe_int(feats.get("beds")),
+                    baths=_safe_int(feats.get("baths")),
+                    lot_sq_ft=_safe_float(feats.get("lot_sq_ft")),
+                )
+            except Exception:
+                pass
+        if updates:
+            try:
+                result = result.model_copy(update=updates)
+            except Exception:
+                pass
+    return result
+
+
+@router.post("/region-lot-sizes", response_model=List[RegionLotSizesRow])
+def api_region_lot_sizes(
+    params: RegionLotSizesParams,
+    conn: Connection = Depends(db_connection_dependency),
+) -> List[RegionLotSizesRow]:
+    """
+    Lot sizes for parcels in a region (city + optional ZIP). For lot-size heatmap.
+    """
+    return queries.region_lot_sizes(conn, params)
+
+
+@router.post("/region-home-sizes", response_model=List[RegionHomeSizesRow])
+def api_region_home_sizes(
+    params: RegionHomeSizesParams,
+    conn: Connection = Depends(db_connection_dependency),
+) -> List[RegionHomeSizesRow]:
+    """
+    Home sizes (living_sq_ft) for sales in a region. For home-size heatmap by year built.
+    """
+    return queries.region_home_sizes(conn, params)
+
+
+@router.post("/region-home-lot-sizes", response_model=List[RegionHomeLotSizesRow])
+def api_region_home_lot_sizes(
+    params: RegionHomeLotSizesParams,
+    conn: Connection = Depends(db_connection_dependency),
+) -> List[RegionHomeLotSizesRow]:
+    """
+    Home size × lot size for sales in a region. For 2D heatmap.
+    """
+    return queries.region_home_lot_sizes(conn, params)
 
 
 @router.post("/nearby-zoning", response_model=List[NearbyZoningRow])

@@ -19,6 +19,7 @@ Use these when you have **read-only** DB access. All are **SELECT only**; no vie
 | **volume_by_city_year.sql** | City × year: total_sales, total_revenue, median_ppsf, avg_ppsf. Read-only from public tables. Params: `:min_sold_date`, optional `:city_name`. |
 | **volume_by_city_year_executable.sql** | Same; LA from 2020. Tableau paste-and-run. |
 | **tableau_grid_year.sql** | Grid × year for map: join analytics.grid_cells_025 + mv_agg_grid_year_ppsf_025. Requires analytics schema. Optional `:sale_year`. |
+| **ppsf_map_grid_readonly.sql** | PPSF map grid (read-only): public tables only; ~0.25-mi cells from lat/lon rounding. Params: `:sale_year`, `:limit`, `:city_name`. No analytics schema required. |
 | **homes_added_to_market_la.sql** | Approx. “homes added to market” in LA: count sales where inferred list date (sold_date − days_on_market) is in period. Params: `:period_start`, `:period_end`, optional `:city_name`. |
 | **zoning_summary.sql** | Week 3: `:parcel_id`. Zone + lot_size_sq_ft; constraints applied in app from zone lookup. |
 | **zoning_summary_executable.sql** | Edit parcel_id and run. |

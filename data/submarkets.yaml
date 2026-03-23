@@ -1,0 +1,19 @@
+# LA submarket list (city-level). Week 4 canonical geography.
+# Used for submarket PPSF comparison and exploratory analysis.
+# See docs/submarket-definition.md for full definition.
+
+canonical_geographies:
+  - city
+  - grid_025mi
+
+cities:
+  - LOS ANGELES
+  - BURBANK
+  - GLENDALE
+  - PASADENA
+  - SANTA MONICA
+  - LONG BEACH
+  - INGLEWOOD
+  - CULVER CITY
+  - WEST HOLLYWOOD
+  - SAN FERNANDO
