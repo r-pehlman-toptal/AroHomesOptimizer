@@ -1,5 +1,7 @@
 # Property details you can display (Attom API)
 
+**Web UI walkthrough:** see [attom-web-ui-guide.md](attom-web-ui-guide.md) (Attom tab: Property details, Rebuild eval, Site search).
+
 From the Attom Property API response (e.g. `/property/detail`), you can display the following. Our client normalizes many of these for the UI and rebuild features.
 
 ---

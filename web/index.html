@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>LA Comps &amp; Aggregates – Visualizations</title>
+  <title>Attom — LA property data</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -39,11 +39,13 @@
     .rebuild-eval-badge.valid { background: #238636; color: #fff; }
     .rebuild-eval-badge.invalid { background: #da3633; color: #fff; }
     .rebuild-eval-price { font-weight: 600; color: var(--accent); }
+    /* Attom-only UI: hide Aro region bar; sub-nav has only Attom buttons */
+    body.attom-only-ui #aro-region-bar { display: none !important; }
   </style>
 </head>
-<body>
-  <h1>LA Comps &amp; Aggregates</h1>
-  <div class="form-row" style="margin-bottom: 0.75rem;">
+<body class="attom-only-ui">
+  <h1>Attom — LA property data</h1>
+  <div id="aro-region-bar" class="form-row" style="margin-bottom: 0.75rem;">
     <label><strong>City</strong>
       <select id="city-select">
         <option value="LOS ANGELES">Los Angeles</option>
@@ -63,15 +65,8 @@
     </label>
     <button type="button" class="primary" id="btn-show-region">Show features in this region</button>
   </div>
-  <nav id="main-nav" style="margin-bottom: 0.25rem;">
-    <button type="button" data-main="aro" class="active">Aro homes (my data)</button>
-    <button type="button" data-main="attom">Attom</button>
-  </nav>
-  <nav id="sub-nav">
-    <button type="button" data-panel="region" data-source="aro">By address</button>
-    <button type="button" data-panel="comps-market" data-source="aro" class="active">Comps &amp; market</button>
-    <button type="button" data-panel="rebuild" data-source="aro">Rebuild</button>
-    <button type="button" data-panel="property-details" data-source="attom">Property details</button>
+  <nav id="sub-nav" aria-label="Attom views">
+    <button type="button" data-panel="property-details" data-source="attom" class="active">Property details</button>
     <button type="button" data-panel="rebuild-eval-attom" data-source="attom">Rebuild eval</button>
     <button type="button" data-panel="site-search-attom" data-source="attom">Site search</button>
   </nav>
@@ -178,7 +173,7 @@
     </div>
   </div>
 
-  <div id="panel-comps-market" class="panel active" data-source="aro">
+  <div id="panel-comps-market" class="panel" data-source="aro">
     <div class="card">
       <h2>Property – Comps &amp; confidence</h2>
       <p class="summary">Enter property ID, load property (MLS + footprint + zoning), then get comps &amp; confidence.</p>
@@ -432,10 +427,10 @@
     </div>
   </div>
 
-  <div id="panel-property-details" class="panel" data-source="attom">
+  <div id="panel-property-details" class="panel active" data-source="attom">
     <div class="card">
       <h2>Property details (Attom)</h2>
-      <p class="summary">Look up a property by full address – similar to Zillow home details. Data from <strong>Attom</strong> (address, beds/baths, sq ft, lot, year built, sale, value estimate).</p>
+      <p class="summary">Look up a property by full address. Data from <strong>Attom</strong> (address, beds/baths, sq ft, lot, year built, sale, value estimate).</p>
       <div class="form-row">
         <label>Address <input type="text" id="attom-address" placeholder="e.g. 11401 Clover Ave, Los Angeles, CA 90066" style="min-width: 340px;" /></label>
         <button type="button" class="primary" id="btn-attom-lookup">Look up</button>
@@ -444,7 +439,7 @@
       <div id="attom-result-wrap" style="display: none; margin-top: 1rem;">
         <div class="rebuild-eval-section">
           <h4 id="attom-address-heading" style="font-size: 1.1rem; margin-bottom: 0.5rem;"></h4>
-          <div id="attom-zestimate-block" style="margin-bottom: 1rem; padding: 0.75rem; background: var(--bg); border-radius: 6px; border: 1px solid var(--border);"></div>
+          <div id="attom-value-hero-block" style="margin-bottom: 1rem; padding: 0.75rem; background: var(--bg); border-radius: 6px; border: 1px solid var(--border);"></div>
           <div id="attom-stats-row" style="display: flex; flex-wrap: wrap; gap: 1rem 1.5rem; margin-bottom: 1rem; padding: 0.75rem; background: var(--bg); border-radius: 6px; border: 1px solid var(--border); font-size: 0.95rem;"></div>
           <div id="attom-hero" class="summary" style="font-size: 1rem; margin-bottom: 0.75rem;"></div>
           <div id="attom-ppsf-rent" class="summary" style="font-size: 0.9rem; color: var(--muted); margin-bottom: 1rem;"></div>
@@ -502,13 +497,13 @@
         Plot new-build sales on a map. Each dot = one sale. Color by
         <strong>home size</strong> (living sqft), <strong>lot size</strong>, or <strong>PPSF</strong>.
         Cool blue = small/cheap · warm red = large/expensive.
-        Leave ZIP blank to search the <strong>whole LA area</strong> by radius.
+        <strong>ZIP code is required</strong> (whole-LA search is disabled to avoid timeouts).
       </p>
       <div class="form-row">
-        <label>ZIP code <small style="color:var(--muted);">(blank = all LA)</small>
-          <input type="text" id="nbm-zip" placeholder="blank = all LA" style="width: 9rem;" />
+        <label>ZIP code <small style="color:var(--muted);">(required)</small>
+          <input type="text" id="nbm-zip" placeholder="e.g. 90066" inputmode="numeric" autocomplete="postal-code" maxlength="10" style="width: 9rem;" title="5-digit ZIP" />
         </label>
-        <label id="nbm-radius-wrap">Radius (mi)
+        <label id="nbm-radius-wrap" style="display:none;" aria-hidden="true">Radius (mi)
           <input type="number" id="nbm-radius" value="20" min="1" max="50" step="1" style="width: 5rem;" />
         </label>
         <label>Min year built <input type="number" id="nbm-min-year" value="2020" min="2000" max="2030" step="1" style="width: 6rem;" /></label>
@@ -535,13 +530,13 @@
       <h2>Site search</h2>
       <p class="summary">
         Find density &amp; incidence of target properties, optimize product mix, and map value accretion —
-        all from shared filters. Leave ZIP blank to search across all of LA.
+        all from shared filters. <strong>ZIP code is required</strong> (whole-LA search is disabled to avoid timeouts).
       </p>
       <div class="form-row" style="flex-wrap:wrap; gap:0.5rem 1.2rem;">
-        <label>ZIP <small style="color:var(--muted);">(blank = all LA)</small>
-          <input type="text" id="ss-zip" placeholder="blank = all LA" style="width:9rem;" />
+        <label>ZIP <small style="color:var(--muted);">(required)</small>
+          <input type="text" id="ss-zip" placeholder="e.g. 90066" inputmode="numeric" autocomplete="postal-code" maxlength="10" style="width:9rem;" title="5-digit ZIP (optional +4)" />
         </label>
-        <label id="ss-radius-wrap">Radius (mi)
+        <label id="ss-radius-wrap" style="display:none;" aria-hidden="true">Radius (mi)
           <input type="number" id="ss-radius" value="20" min="1" max="50" step="1" style="width:5rem;" />
         </label>
         <label>Max year built
@@ -702,6 +697,10 @@
 
   <script>
     const API = ''; // same origin; or e.g. 'http://localhost:8000'
+    function isValidZipCode(z) {
+      const s = (z || '').trim();
+      return /^\d{5}(-\d{4})?$/.test(s);
+    }
     function getSelectedCity() {
       const el = document.getElementById('city-select');
       return el ? el.value : 'LOS ANGELES';
@@ -779,17 +778,21 @@
         document.getElementById('region-features-wrap').style.display = 'none';
         return;
       }
-      // Switch to Aro tab and show By address panel
-      setMainTab('aro');
-      showSubNavFor('aro');
-      showPanelsFor('aro');
-      document.querySelectorAll('#sub-nav button').forEach(b => b.classList.remove('active'));
-      document.querySelector('#sub-nav button[data-panel="region"]').classList.add('active');
-      document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
-      document.getElementById('panel-region').classList.add('active');
+      // Switch to Aro UI only if Aro sub-nav buttons exist (Attom-only build skips this)
+      if (document.querySelector('#sub-nav button[data-source="aro"]')) {
+        setMainTab('aro');
+        showSubNavFor('aro');
+        showPanelsFor('aro');
+        document.querySelectorAll('#sub-nav button').forEach(b => b.classList.remove('active'));
+        const regionSubBtn = document.querySelector('#sub-nav button[data-panel="region"]');
+        if (regionSubBtn) regionSubBtn.classList.add('active');
+        document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+        const panelRegion = document.getElementById('panel-region');
+        if (panelRegion) panelRegion.classList.add('active');
+      }
     });
 
-    let currentMain = 'aro';
+    let currentMain = 'attom';
     function setMainTab(main) {
       currentMain = main;
       document.querySelectorAll('#main-nav button').forEach(b => b.classList.remove('active'));
@@ -835,11 +838,11 @@
       });
     });
 
-    // Initial state: show only Aro sub-nav and panels (Attom hidden)
-    showSubNavFor('aro');
-    showPanelsFor('aro');
+    // Initial state: Attom-only UI (see body.attom-only-ui)
+    showSubNavFor('attom');
+    showPanelsFor('attom');
 
-    // Property details (Attom) – Zillow-style lookup
+    // Property details (Attom) – address lookup
     document.getElementById('btn-attom-lookup').addEventListener('click', async () => {
       const errEl = document.getElementById('attom-error');
       const wrapEl = document.getElementById('attom-result-wrap');
@@ -868,16 +871,16 @@
         const addr = (p.full_address || p.line1 || addressInput).trim();
         document.getElementById('attom-address-heading').textContent = addr;
 
-        var zestimateHtml = '';
+        var valueHeroHtml = '';
         var val = p.avm_value != null ? p.avm_value : p.last_sale_amount;
         if (val != null) {
-          zestimateHtml = '<span style="font-size: 1.5rem; font-weight: 700; color: var(--accent);">$' + Number(val).toLocaleString() + '</span>';
-          if (p.avm_value != null) zestimateHtml += ' <span style="font-size: 0.9rem; color: var(--muted);">Estimated value</span>';
-          else zestimateHtml += ' <span style="font-size: 0.9rem; color: var(--muted);">Last sale</span>';
+          valueHeroHtml = '<span style="font-size: 1.5rem; font-weight: 700; color: var(--accent);">$' + Number(val).toLocaleString() + '</span>';
+          if (p.avm_value != null) valueHeroHtml += ' <span style="font-size: 0.9rem; color: var(--muted);">Estimated value</span>';
+          else valueHeroHtml += ' <span style="font-size: 0.9rem; color: var(--muted);">Last sale</span>';
         } else {
-          zestimateHtml = '<span style="color: var(--muted);">No value estimate available</span>';
+          valueHeroHtml = '<span style="color: var(--muted);">No value estimate available</span>';
         }
-        document.getElementById('attom-zestimate-block').innerHTML = zestimateHtml;
+        document.getElementById('attom-value-hero-block').innerHTML = valueHeroHtml;
 
         var stats = [
           { label: 'Beds', value: p.beds != null ? String(p.beds) : '—' },
@@ -1228,40 +1231,34 @@
       return html;
     }
 
-    // Show/hide radius input based on whether ZIP is filled
-    document.getElementById('nbm-zip').addEventListener('input', () => {
-      const hasZip = (document.getElementById('nbm-zip').value || '').trim().length > 0;
-      document.getElementById('nbm-radius-wrap').style.display = hasZip ? 'none' : '';
-    });
-    // Hide radius by default if user types a ZIP on first load
-    (function() {
-      const hasZip = (document.getElementById('nbm-zip').value || '').trim().length > 0;
-      document.getElementById('nbm-radius-wrap').style.display = hasZip ? 'none' : '';
-    })();
-
     document.getElementById('btn-nbm-run').addEventListener('click', async () => {
       const errEl = document.getElementById('nbm-error');
       const sumEl = document.getElementById('nbm-summary');
       const legEl = document.getElementById('nbm-legend');
       const zipCode = (document.getElementById('nbm-zip').value || '').trim();
-      const radiusMiles = parseFloat(document.getElementById('nbm-radius').value) || 20;
       const minYear = parseInt(document.getElementById('nbm-min-year').value, 10) || 2020;
       const pageSize = parseInt(document.getElementById('nbm-page-size').value, 10) || 100;
       const colorBy = document.getElementById('nbm-color-by').value;
       const colorByLabel = { living_sq_ft: 'Home size (sqft)', lot_sq_ft: 'Lot size (sqft)', ppsf: 'PPSF ($/sqft)' }[colorBy] || colorBy;
 
       errEl.textContent = '';
-      sumEl.textContent = zipCode ? `Loading ZIP ${zipCode}…` : `Loading LA area (${radiusMiles} mi radius)…`;
+      if (!zipCode) {
+        errEl.textContent = 'Enter a ZIP code. Whole-LA search is disabled to avoid gateway timeouts (504).';
+        sumEl.textContent = '';
+        legEl.style.display = 'none';
+        return;
+      }
+      if (!isValidZipCode(zipCode)) {
+        errEl.textContent = 'Enter a valid 5-digit ZIP code (optionally ZIP+4).';
+        sumEl.textContent = '';
+        legEl.style.display = 'none';
+        return;
+      }
+
+      sumEl.textContent = `Loading ZIP ${zipCode}…`;
       legEl.style.display = 'none';
 
-      // Build request body — no zip = LA radius search
-      const body = { min_year_built: minYear, page_size: pageSize };
-      if (zipCode) {
-        body.zip_code = zipCode;
-      } else {
-        body.radius_miles = radiusMiles;
-        // latitude/longitude will default to LA center in the backend
-      }
+      const body = { min_year_built: minYear, page_size: pageSize, zip_code: zipCode };
 
       try {
         const res = await fetch(API + '/attom/new-build-map', {
@@ -1344,12 +1341,6 @@
     let vamLastData = null; // value-accretion API payload; merged into tss for map + baseline table
     let chartTssWidth = null;
 
-    // Show/hide radius when ZIP is typed
-    document.getElementById('ss-zip').addEventListener('input', () => {
-      const hasZip = (document.getElementById('ss-zip').value || '').trim().length > 0;
-      document.getElementById('ss-radius-wrap').style.display = hasZip ? 'none' : '';
-    });
-
     function ssReadInputs() {
       const zip       = (document.getElementById('ss-zip').value || '').trim();
       const radius    = parseFloat(document.getElementById('ss-radius').value) || 20;
@@ -1369,7 +1360,7 @@
         max_year_built: p.maxYear, min_living_sq_ft: p.minSqft, max_living_sq_ft: p.maxSqft,
         page_size: p.pageSize, front_setback_ft: p.frontSb, rear_setback_ft: p.rearSb, side_setback_ft: p.sideSb,
       };
-      if (p.zip) body.zip_code = p.zip; else body.radius_miles = p.radius;
+      body.zip_code = p.zip;
       return body;
     }
 
@@ -1381,9 +1372,18 @@
       vamLastData = null;
       document.getElementById('tss-vam-zip-table-wrap').innerHTML = '<p style="color:var(--muted); font-size:0.85rem;">Loading baseline…</p>';
       document.getElementById('tss-vam-footnote').textContent = '';
-      btn.disabled = true; btn.textContent = 'Running…';
 
       const p = ssReadInputs();
+      if (!p.zip) {
+        errEl.textContent = 'Enter a ZIP code. Whole-LA search is disabled to avoid gateway timeouts (504).';
+        return;
+      }
+      if (!isValidZipCode(p.zip)) {
+        errEl.textContent = 'Enter a valid 5-digit ZIP code (optionally ZIP+4).';
+        return;
+      }
+
+      btn.disabled = true; btn.textContent = 'Running…';
 
       // ── Run all three in parallel ──
       const [tssPromise, pmPromise, vamPromise] = [

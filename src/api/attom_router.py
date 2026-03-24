@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Optional
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field, field_validator
 
 from typing import List as TypingList
@@ -29,6 +29,17 @@ router = APIRouter(
 )
 
 
+def _require_zip_code(zip_code: Optional[str]) -> str:
+    """Whole-LA radius searches overload Attom/gateway; require a ZIP for these endpoints."""
+    z = (zip_code or "").strip()
+    if not z:
+        raise HTTPException(
+            status_code=422,
+            detail="zip_code is required. Whole-LA (radius-only) search is disabled to avoid gateway timeouts.",
+        )
+    return z
+
+
 class AttomPropertyDetailsRequest(BaseModel):
     address: str = Field(..., min_length=5, description="Full address, e.g. 11401 Clover Ave, Los Angeles, CA 90066")
 
@@ -41,7 +52,7 @@ class AttomAvmInRadiusRequest(BaseModel):
 @router.post("/property-details")
 def api_attom_property_details(params: AttomPropertyDetailsRequest) -> dict:
     """
-    Look up property details from Attom by address. Returns Zillow-style fields:
+    Look up property details from Attom by address. Returns fields such as:
     full_address, beds, baths, living_sq_ft, lot_sq_ft, year_built, property_type,
     last_sale_amount, last_sale_date, avm_value, etc. Sale history is omitted so the
     UI can load it asynchronously via POST /attom/sale-history.
@@ -203,7 +214,7 @@ def api_attom_new_build_benchmark(params: AttomNewBuildBenchmarkRequest) -> Atto
 
 
 class AttomNewBuildMapRequest(BaseModel):
-    zip_code: Optional[str] = Field(None, description="ZIP code filter. Leave blank to search the whole LA area by radius.")
+    zip_code: Optional[str] = Field(None, description="ZIP code (required). Whole-LA radius search is disabled.")
     min_year_built: int = Field(2020, ge=2000, le=2030, description="Only homes built on or after this year (default 2020)")
     page_size: int = Field(100, ge=1, le=200, description="Max records to fetch (1–200)")
     latitude: Optional[float] = Field(None, description="Center lat for radius search (used when zip_code is blank)")
@@ -215,11 +226,11 @@ class AttomNewBuildMapRequest(BaseModel):
 def api_attom_new_build_map(params: AttomNewBuildMapRequest) -> dict:
     """
     Per-property new-build sale data for geographic map plotting.
-    - With zip_code: filters by ZIP.
-    - Without zip_code: uses lat/lon + radius (defaults to LA center, 20-mile radius).
+    Requires zip_code (whole-LA radius search is disabled).
     Returns list of properties with lat, lon, living_sq_ft, lot_sq_ft,
     year_built, sale_amt, ppsf. Color map by home size or lot size in UI.
     """
+    _require_zip_code(params.zip_code)
     return fetch_new_build_properties_for_map(
         zip_code=params.zip_code,
         min_year_built=params.min_year_built,
@@ -231,7 +242,7 @@ def api_attom_new_build_map(params: AttomNewBuildMapRequest) -> dict:
 
 
 class AttomTargetSitesRequest(BaseModel):
-    zip_code: Optional[str] = Field(None, description="ZIP code filter. Blank = LA area by radius.")
+    zip_code: Optional[str] = Field(None, description="ZIP code (required). Whole-LA radius search is disabled.")
     latitude: Optional[float] = Field(None, description="Center lat (used when zip_code is blank)")
     longitude: Optional[float] = Field(None, description="Center lon (used when zip_code is blank)")
     radius_miles: float = Field(20.0, ge=0.5, le=50.0, description="Radius in miles when no ZIP (default 20)")
@@ -250,9 +261,11 @@ def api_attom_target_sites(params: AttomTargetSitesRequest) -> dict:
     """
     Find density/incidence of ~50-yr-old, ~1,400 sqft homes on buildable lots.
     Uses Attom /property/snapshot + maxYearBuilt + living sqft range.
+    Requires zip_code (whole-LA radius search is disabled).
     Returns total count, buildable %, lot-width distribution, p25/p50/p75 dimensions,
     and per-property list for map plotting.
     """
+    _require_zip_code(params.zip_code)
     return fetch_target_sites_attom(
         zip_code=params.zip_code,
         latitude=params.latitude,
@@ -270,7 +283,7 @@ def api_attom_target_sites(params: AttomTargetSitesRequest) -> dict:
 
 
 class AttomProductMixRequest(BaseModel):
-    zip_code: Optional[str] = Field(None, description="ZIP code filter. Blank = LA area by radius.")
+    zip_code: Optional[str] = Field(None, description="ZIP code (required). Whole-LA radius search is disabled.")
     latitude: Optional[float] = Field(None)
     longitude: Optional[float] = Field(None)
     radius_miles: float = Field(20.0, ge=0.5, le=50.0)
@@ -295,9 +308,11 @@ def api_attom_product_mix(params: AttomProductMixRequest) -> dict:
     """
     Product mix optimizer: find the target home size that maximises
     quantity × value creation across the area.
+    Requires zip_code (whole-LA radius search is disabled).
     Fetches all target sites once, sweeps target_sizes in-memory,
     returns per-size buildable count + value accretion + total value created.
     """
+    _require_zip_code(params.zip_code)
     return fetch_product_mix_attom(
         zip_code=params.zip_code,
         latitude=params.latitude,
@@ -318,7 +333,7 @@ def api_attom_product_mix(params: AttomProductMixRequest) -> dict:
 
 
 class AttomValueAccretionMapRequest(BaseModel):
-    zip_code: Optional[str] = Field(None, description="ZIP code filter. Blank = LA area by radius.")
+    zip_code: Optional[str] = Field(None, description="ZIP code (required). Whole-LA radius search is disabled.")
     latitude: Optional[float] = Field(None)
     longitude: Optional[float] = Field(None)
     radius_miles: float = Field(20.0, ge=0.5, le=50.0)
@@ -338,10 +353,12 @@ class AttomValueAccretionMapRequest(BaseModel):
 def api_attom_value_accretion_map(params: AttomValueAccretionMapRequest) -> dict:
     """
     Value accretion heat map for a single target home size.
+    Requires zip_code (whole-LA radius search is disabled).
     PPSF is fetched once per ZIP (parallel), applied to all properties in that ZIP.
     Returns per-property value_accretion = (zip_ppsf × target_sqft) − existing_value,
     plus per-ZIP PPSF baseline table for the heat map layer.
     """
+    _require_zip_code(params.zip_code)
     return fetch_value_accretion_heatmap_attom(
         zip_code=params.zip_code,
         latitude=params.latitude,
