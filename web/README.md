@@ -22,6 +22,17 @@ Single-page app that implements the [visualization ladder](../docs/tableau/visua
 
 All charts call the same-origin API (`/queries/...`). If the query router uses auth (e.g. Cognito), configure the client or temporarily relax auth for local use.
 
+## Testing address lookup and rebuild eval
+
+1. Open **http://localhost:8000/app** (or `/viz`).
+2. Go to the **Rebuild** tab.
+3. In the **Rebuild eval (address → feasibility + comps)** card:
+   - **Address or property ID**: enter a numeric property ID (e.g. one that exists in your DB, like `12345`) or, for non-numeric text, also fill **ZIP** so the lookup can narrow results.
+   - **ZIP (optional)**: use when the address text is not a property ID (e.g. street name) to limit candidates.
+   - **Target size (sq ft)**: default 2700; used for feasibility and comps price band.
+   - Click **Run rebuild eval**.
+4. The result shows: resolved property ID and address, `is_valid`, notes, feasibility (max GFA, fits target?), and comps economics (price band, comp count, confidence). If the address cannot be resolved or the parcel has no geometry/zoning, you’ll see `is_valid: No` and notes explaining why.
+
 ## Stack
 
 - Vanilla JS, no build step.

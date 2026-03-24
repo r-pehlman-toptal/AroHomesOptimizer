@@ -1,14 +1,24 @@
 from __future__ import annotations
 
+import re
+from datetime import date
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional
 
 from sqlalchemy import text
 from sqlalchemy.engine import Connection
+from sqlalchemy.exc import ProgrammingError
 
 from src.db import load_sql
 from src.query_service.schemas import (
+    AddressLookupParams,
+    AddressLookupRow,
     BedBathDistributionParams,
+    RebuildEvalParams,
+    RebuildEvalResponse,
+    RebuildEvalFeasibilityFit,
+    RebuildEvalBuildableFootprint,
+    RebuildEvalCompsEconomics,
     BedBathDistributionRow,
     PrincipalZoneParams,
     PrincipalZoneRow,
@@ -33,6 +43,12 @@ from src.query_service.schemas import (
     ParcelFootprintRow,
     PropertyInfoParams,
     PropertyInfoRow,
+    RegionLotSizesParams,
+    RegionLotSizesRow,
+    RegionHomeSizesParams,
+    RegionHomeSizesRow,
+    RegionHomeLotSizesParams,
+    RegionHomeLotSizesRow,
     NearbyZoningParams,
     NearbyZoningRow,
     CompsParams,
@@ -51,6 +67,12 @@ from src.query_service.schemas import (
     VolumeByCityYearRow,
     VolumeByZipMonthParams,
     VolumeByZipMonthRow,
+    NewBuildBenchmarkParams,
+    NewBuildBenchmarkRow,
+    SiteSearchParams,
+    SiteSearchRow,
+    TargetPipelineSummaryParams,
+    TargetPipelineSummary,
 )
 from src.query_service.comps_confidence import confidence_score_and_band, confidence_components
 
@@ -409,23 +431,63 @@ _VOLUME_BY_ZIP_YEAR_SQL = _PROJECT_ROOT / "sql" / "readonly" / "volume_by_zip_ye
 _VOLUME_BY_CITY_YEAR_SQL = _PROJECT_ROOT / "sql" / "readonly" / "volume_by_city_year.sql"
 _VOLUME_BY_ZIP_MONTH_SQL = _PROJECT_ROOT / "sql" / "readonly" / "volume_by_zip_month.sql"
 _VOLUME_BY_ZIP_MONTH_NO_DOM_SQL = _PROJECT_ROOT / "sql" / "readonly" / "volume_by_zip_month_no_dom.sql"
+_PPSF_MAP_GRID_READONLY_SQL = _PROJECT_ROOT / "sql" / "readonly" / "ppsf_map_grid_readonly.sql"
+_NEW_BUILD_BENCHMARK_SQL = _PROJECT_ROOT / "sql" / "readonly" / "new_build_benchmark.sql"
+_REGION_LOT_SIZES_SQL = _PROJECT_ROOT / "sql" / "readonly" / "region_lot_sizes.sql"
+_REGION_HOME_SIZES_SQL = _PROJECT_ROOT / "sql" / "readonly" / "region_home_sizes.sql"
+_REGION_HOME_LOT_SIZES_SQL = _PROJECT_ROOT / "sql" / "readonly" / "region_home_lot_sizes.sql"
+_ADDRESS_LOOKUP_SQL = _PROJECT_ROOT / "sql" / "readonly" / "address_lookup.sql"
 
 
 def f1_comps(conn: Connection, p: F1CompsParams) -> List[F1CompsRow]:
     """
     F1 Comps: read-only mode. Single SELECT from public tables (no analytics schema).
     Tableau and web app can use this when DB has no CREATE rights.
+    When min_year_built and max_year_built are set, filter by year built; else by sold date.
     """
+    min_sold = p.min_sold_date if p.min_sold_date is not None else date(p.sale_year, 1, 1)
+    max_sold = p.max_sold_date if p.max_sold_date is not None else date(p.sale_year, 12, 31)
+    use_year_built = 1 if (p.min_year_built is not None and p.max_year_built is not None) else 0
+    min_yb = p.min_year_built if p.min_year_built is not None else 1900
+    max_yb = p.max_year_built if p.max_year_built is not None else 2100
     sql = load_sql(_F1_COMPS_SQL)
+    zip_str = str(p.zip_code).strip() if p.zip_code is not None else ""
+    city_param = (p.city_name or "").strip()
     params = {
-        "zip_code": p.zip_code.strip(),
-        "sale_year": p.sale_year,
+        "zip_code": zip_str,
+        "min_sold_date": min_sold,
+        "max_sold_date": max_sold,
+        "filter_by_year_built": use_year_built,
+        "min_year_built": min_yb,
+        "max_year_built": max_yb,
         "limit": p.limit,
         "ppsf_min": p.ppsf_min,
-        "city_name": _norm_city(p.city_name),
+        "city_name": "" if not city_param else _norm_city(p.city_name),
     }
     rows = list(_fetch_all(conn, sql, params))
-    return [F1CompsRow(**r) for r in rows]
+    out: List[F1CompsRow] = []
+    for r in rows:
+        # Normalize DB types for Pydantic (e.g. Decimal -> float, ensure date)
+        sd = r.get("sold_date")
+        if sd is None:
+            continue  # skip rows with no sold_date
+        if not isinstance(sd, date):
+            sd = date.fromisoformat(str(sd)[:10])
+        row = {
+            "sale_id": int(r["sale_id"]),
+            "property_id": int(r["property_id"]),
+            "sold_date": sd,
+            "sold_price": float(r["sold_price"]) if r.get("sold_price") is not None else 0.0,
+            "living_sq_ft": float(r["living_sq_ft"]) if r.get("living_sq_ft") is not None else 0.0,
+            "ppsf": float(r["ppsf"]) if r.get("ppsf") is not None else 0.0,
+            "zip_code": str(r["zip_code"]) if r.get("zip_code") is not None else None,
+            "city_name": str(r["city_name"]) if r.get("city_name") is not None else None,
+            "year_built": int(r["year_built"]) if r.get("year_built") is not None else None,
+            "comp_count": int(r["comp_count"]) if r.get("comp_count") is not None else 0,
+            "confidence_band": str(r["confidence_band"]) if r.get("confidence_band") else "low",
+        }
+        out.append(F1CompsRow(**row))
+    return out
 
 
 def f3_offer_range(conn: Connection, p: F3OfferRangeParams) -> List[F3OfferRangeRow]:
@@ -652,15 +714,362 @@ def volume_by_zip_month(conn: Connection, p: VolumeByZipMonthParams) -> List[Vol
     raise RuntimeError("volume_by_zip_month failed with both SQL variants")
 
 
+# ---- Site search: parcels where a target product could be built ----
+
+
+def site_search(conn: Connection, p: SiteSearchParams) -> List[SiteSearchRow]:
+    """
+    Find parcels where zoning × lot size × dimensions support at least target_sqft.
+    Optional: filter by current home age (max_year_built) and size (min/max_living_sq_ft) from latest sale.
+
+    Read-only; uses property_address, street, city, property_geometry, property_zoning, zone, mls_history.
+    """
+    sql = """
+    WITH addr_one AS (
+        SELECT DISTINCT ON (a.property_id)
+            a.property_id,
+            a.street_id,
+            a.zip_code
+        FROM property_address a
+        ORDER BY a.property_id, a.street_id
+    ),
+    geom_one AS (
+        SELECT DISTINCT ON (pg.property_id)
+            pg.property_id,
+            pg.vendor_lot_width_ft,
+            pg.vendor_lot_depth_ft,
+            pg.lot_size_sq_ft
+        FROM property_geometry pg
+        ORDER BY pg.property_id
+    ),
+    zoning_one AS (
+        SELECT DISTINCT ON (pz.property_id)
+            pz.property_id,
+            z.name AS zone_code
+        FROM property_zoning pz
+        JOIN zone z ON z.id = pz.zone_id
+        ORDER BY pz.property_id
+    ),
+    base AS (
+        SELECT
+            a.property_id,
+            a.zip_code,
+            c.name AS city_name,
+            z.zone_code,
+            g.lot_size_sq_ft,
+            g.vendor_lot_width_ft AS lot_width_ft,
+            g.vendor_lot_depth_ft AS lot_depth_ft
+        FROM addr_one a
+        JOIN street s ON s.id = a.street_id
+        JOIN city c ON c.id = s.city_id
+        JOIN geom_one g ON g.property_id = a.property_id
+        JOIN zoning_one z ON z.property_id = a.property_id
+        WHERE
+            g.lot_size_sq_ft IS NOT NULL
+            AND g.vendor_lot_width_ft IS NOT NULL
+            AND g.vendor_lot_depth_ft IS NOT NULL
+            AND g.vendor_lot_width_ft > 0
+            AND g.vendor_lot_depth_ft > 0
+            AND UPPER(TRIM(c.name)) = :city_name
+            AND (:zip_code IS NULL OR a.zip_code = :zip_code)
+    ),
+    latest_sale AS (
+        SELECT DISTINCT ON (h.property_id)
+            h.property_id,
+            h.year_built,
+            h.living_sq_ft
+        FROM mls_history h
+        JOIN base b ON b.property_id = h.property_id
+        WHERE h.sold_price > 0
+          AND h.living_sq_ft > 0
+          AND h.sold_date IS NOT NULL
+        ORDER BY h.property_id, h.sold_date DESC
+    )
+    SELECT
+        b.property_id,
+        b.zip_code,
+        b.city_name,
+        b.zone_code,
+        b.lot_size_sq_ft,
+        b.lot_width_ft,
+        b.lot_depth_ft,
+        ls.year_built,
+        ls.living_sq_ft
+    FROM base b
+    LEFT JOIN latest_sale ls ON ls.property_id = b.property_id
+    WHERE
+        (:max_year_built IS NULL OR (ls.year_built IS NOT NULL AND ls.year_built <= :max_year_built))
+        AND (:min_living_sq_ft IS NULL OR (ls.living_sq_ft IS NOT NULL AND ls.living_sq_ft >= :min_living_sq_ft))
+        AND (:max_living_sq_ft IS NULL OR (ls.living_sq_ft IS NOT NULL AND ls.living_sq_ft <= :max_living_sq_ft))
+    """
+    params = {
+        "city_name": _norm_city(p.city_name),
+        "zip_code": _opt_str(p.zip_code),
+        "max_year_built": p.max_year_built,
+        "min_living_sq_ft": p.min_living_sq_ft if (p.min_living_sq_ft is not None and p.min_living_sq_ft > 0) else None,
+        "max_living_sq_ft": p.max_living_sq_ft if (p.max_living_sq_ft is not None and p.max_living_sq_ft > 0) else None,
+    }
+    rows = list(_fetch_all(conn, sql, params))
+    results: List[SiteSearchRow] = []
+    min_width = p.min_width_ft if p.min_width_ft and p.min_width_ft > 0 else None
+    min_depth = p.min_depth_ft if p.min_depth_ft and p.min_depth_ft > 0 else None
+    allowed_zones = set([z.strip().upper() for z in (p.zone_codes or []) if z and z.strip()])
+    for r in rows:
+        zone_code = str(r["zone_code"]).strip() if r.get("zone_code") else None
+        if not zone_code:
+            continue
+        if allowed_zones and zone_code.upper() not in allowed_zones:
+            continue
+        lot_sq = float(r["lot_size_sq_ft"]) if r.get("lot_size_sq_ft") is not None else None
+        if lot_sq is None:
+            continue
+        lu = _ZONE_LOOKUP.get(zone_code)
+        if not lu:
+            continue
+        max_far = lu["max_far"]
+        max_gfa = lot_sq * max_far
+        if max_gfa < p.target_sqft:
+            continue
+        w = float(r["lot_width_ft"]) if r.get("lot_width_ft") is not None else None
+        d = float(r["lot_depth_ft"]) if r.get("lot_depth_ft") is not None else None
+        if min_width is not None and (w is None or w < min_width):
+            continue
+        if min_depth is not None and (d is None or d < min_depth):
+            continue
+        year_built = int(r["year_built"]) if r.get("year_built") is not None else None
+        living_sq_ft = float(r["living_sq_ft"]) if r.get("living_sq_ft") is not None else None
+        results.append(
+            SiteSearchRow(
+                property_id=int(r["property_id"]),
+                zip_code=str(r["zip_code"]) if r.get("zip_code") else None,
+                city_name=str(r["city_name"]) if r.get("city_name") else None,
+                zone_code=zone_code,
+                lot_size_sq_ft=lot_sq,
+                lot_width_ft=w,
+                lot_depth_ft=d,
+                max_gfa_estimate=round(max_gfa, 2),
+                year_built=year_built,
+                living_sq_ft=round(living_sq_ft, 2) if living_sq_ft is not None else None,
+            )
+        )
+        if len(results) >= p.limit:
+            break
+    return results
+
+
+def _fetch_parcel_sold_prices(
+    conn: Connection, property_ids: List[int]
+) -> Dict[int, tuple[Optional[str], Optional[float]]]:
+    """
+    For each property_id in the list, return (zip_code, sold_price) from latest sale.
+    Returns dict property_id -> (zip_code, sold_price).
+    """
+    if not property_ids:
+        return {}
+    sql = """
+    WITH latest AS (
+        SELECT DISTINCT ON (h.property_id)
+            h.property_id,
+            h.sold_price,
+            a.zip_code
+        FROM mls_history h
+        LEFT JOIN (
+            SELECT DISTINCT ON (property_id) property_id, zip_code
+            FROM property_address
+            ORDER BY property_id, street_id
+        ) a ON a.property_id = h.property_id
+        WHERE h.property_id = ANY(:property_ids)
+          AND h.sold_price > 0
+          AND h.sold_date IS NOT NULL
+        ORDER BY h.property_id, h.sold_date DESC
+    )
+    SELECT property_id, zip_code, sold_price FROM latest
+    """
+    rows = list(_fetch_all(conn, sql, {"property_ids": property_ids}))
+    out: Dict[int, tuple[Optional[str], Optional[float]]] = {}
+    for r in rows:
+        pid = int(r["property_id"])
+        z = str(r["zip_code"]).strip() if r.get("zip_code") else None
+        sp = float(r["sold_price"]) if r.get("sold_price") is not None else None
+        out[pid] = (z, sp)
+    return out
+
+
+def target_pipeline_summary(conn: Connection, p: TargetPipelineSummaryParams) -> TargetPipelineSummary:
+    """
+    Count parcels where target fits and (optional) older/smaller filters pass; aggregate value created.
+    Uses site_search for the parcel set, then latest sale for existing value and new_build_benchmark per ZIP.
+    """
+    # SiteSearchParams.limit max is 500; cap so we don't exceed it
+    search_params = SiteSearchParams(
+        target_sqft=p.target_sqft,
+        city_name=p.city_name,
+        zip_code=p.zip_code,
+        zone_codes=p.zone_codes,
+        max_year_built=p.max_year_built,
+        min_living_sq_ft=p.min_living_sq_ft,
+        max_living_sq_ft=p.max_living_sq_ft,
+        limit=min(p.limit, 500),
+    )
+    rows = site_search(conn, search_params)
+    parcel_count = len(rows)
+    if parcel_count == 0:
+        return TargetPipelineSummary(
+            parcel_count=0,
+            total_existing_value=None,
+            total_new_build_value=None,
+            total_value_created=None,
+            parcels_with_sale=0,
+            zips_with_benchmark=0,
+        )
+    property_ids = [r.property_id for r in rows]
+    sold_prices = _fetch_parcel_sold_prices(conn, property_ids)
+    zips_needed = set(z for _pid, (z, _) in sold_prices.items() if z and str(z).strip())
+    benchmark_ppsf: Dict[str, float] = {}
+    for zip_code in zips_needed:
+        try:
+            nb_params = NewBuildBenchmarkParams(
+                min_sold_date="2020-01-01",
+                min_year_built=2020,
+                city_name=p.city_name,
+                zip_code=zip_code,
+            )
+            nb_rows = new_build_benchmark(conn, nb_params)
+            if nb_rows:
+                row = sorted(nb_rows, key=lambda r: r.sale_year, reverse=True)[0]
+                if row.median_ppsf is not None:
+                    benchmark_ppsf[zip_code] = float(row.median_ppsf)
+        except Exception:
+            continue
+    total_existing = 0.0
+    total_new_build = 0.0
+    parcels_with_sale = 0
+    for r in rows:
+        z, sp = sold_prices.get(r.property_id, (None, None))
+        if sp is not None:
+            total_existing += sp
+            parcels_with_sale += 1
+        ppsf = benchmark_ppsf.get(z) if z else None
+        if ppsf is not None:
+            total_new_build += ppsf * p.target_sqft
+    total_value_created = (total_new_build - total_existing) if (total_existing > 0 or total_new_build > 0) else None
+    return TargetPipelineSummary(
+        parcel_count=parcel_count,
+        total_existing_value=round(total_existing, 2) if total_existing else None,
+        total_new_build_value=round(total_new_build, 2) if total_new_build else None,
+        total_value_created=round(total_value_created, 2) if total_value_created is not None else None,
+        parcels_with_sale=parcels_with_sale,
+        zips_with_benchmark=len(benchmark_ppsf),
+    )
+
+
 # ---- Week 3: Zoning summary ("what you can build") ----
 # Zone-code lookup (aligns with src/feasibility/zoning_constraints.DEFAULT_LA_ZONE_LOOKUP).
+# Setbacks (ft): LA typical for R1/RS/RE; used to compute buildable footprint (lot minus setbacks).
 _ZONE_LOOKUP = {
-    "R1": {"max_far": 0.5, "max_height_ft": 30.0, "min_parking_spaces": 2.0, "max_units": 1},
-    "R2": {"max_far": 0.5, "max_height_ft": 30.0, "min_parking_spaces": 2.0, "max_units": 2},
-    "RS": {"max_far": 0.5, "max_height_ft": 30.0, "min_parking_spaces": 2.0, "max_units": 1},
-    "RE": {"max_far": 0.35, "max_height_ft": 28.0, "min_parking_spaces": 2.0, "max_units": 1},
-    "RM": {"max_far": 1.25, "max_height_ft": 45.0, "min_parking_spaces": 1.5, "max_units": 8},
+    "R1": {"max_far": 0.5, "max_height_ft": 30.0, "min_parking_spaces": 2.0, "max_units": 1, "front_setback_ft": 20.0, "rear_setback_ft": 20.0, "side_setback_ft": 5.0},
+    "R2": {"max_far": 0.5, "max_height_ft": 30.0, "min_parking_spaces": 2.0, "max_units": 2, "front_setback_ft": 20.0, "rear_setback_ft": 20.0, "side_setback_ft": 5.0},
+    "RS": {"max_far": 0.5, "max_height_ft": 30.0, "min_parking_spaces": 2.0, "max_units": 1, "front_setback_ft": 20.0, "rear_setback_ft": 20.0, "side_setback_ft": 5.0},
+    "RE": {"max_far": 0.35, "max_height_ft": 28.0, "min_parking_spaces": 2.0, "max_units": 1, "front_setback_ft": 20.0, "rear_setback_ft": 20.0, "side_setback_ft": 5.0},
+    "RM": {"max_far": 1.25, "max_height_ft": 45.0, "min_parking_spaces": 1.5, "max_units": 8, "front_setback_ft": 15.0, "rear_setback_ft": 15.0, "side_setback_ft": 5.0},
 }
+
+# Default setbacks when zone not in lookup (conservative).
+_DEFAULT_SETBACKS = {"front_setback_ft": 20.0, "rear_setback_ft": 20.0, "side_setback_ft": 5.0}
+
+
+def _buildable_footprint_from_zoning(
+    lot_width_ft: Optional[float],
+    lot_depth_ft: Optional[float],
+    zone_code: Optional[str],
+) -> tuple[Optional[float], Optional[float], Optional[float], Optional[str]]:
+    """
+    Compute buildable pad (width × depth) from lot dimensions and zone setbacks.
+    Returns (buildable_width_ft, buildable_depth_ft, buildable_sq_ft, notes).
+    Example: 60×100 lot, 10 ft side / 20 ft front+rear → buildable 50×60.
+    """
+    if lot_width_ft is None or lot_depth_ft is None or lot_width_ft <= 0 or lot_depth_ft <= 0:
+        return (None, None, None, "Lot width or depth missing; cannot compute buildable footprint.")
+    setbacks = _DEFAULT_SETBACKS
+    if zone_code and zone_code.strip():
+        lu = _ZONE_LOOKUP.get(zone_code.strip().upper())
+        if lu and "front_setback_ft" in lu:
+            setbacks = {
+                "front_setback_ft": float(lu.get("front_setback_ft", _DEFAULT_SETBACKS["front_setback_ft"])),
+                "rear_setback_ft": float(lu.get("rear_setback_ft", _DEFAULT_SETBACKS["rear_setback_ft"])),
+                "side_setback_ft": float(lu.get("side_setback_ft", _DEFAULT_SETBACKS["side_setback_ft"])),
+            }
+    front = setbacks["front_setback_ft"]
+    rear = setbacks["rear_setback_ft"]
+    side = setbacks["side_setback_ft"]
+    build_w = max(0.0, lot_width_ft - 2 * side)
+    build_d = max(0.0, lot_depth_ft - front - rear)
+    build_sq = round(build_w * build_d, 2) if (build_w > 0 and build_d > 0) else 0.0
+    notes = None
+    if build_w <= 0 or build_d <= 0:
+        notes = f"Setbacks (front {front}/rear {rear}/side {side} ft) exceed lot dimensions; no buildable pad."
+    return (build_w if build_w > 0 else None, build_d if build_d > 0 else None, build_sq if build_sq > 0 else None, notes)
+
+
+def _fallback_max_far_from_recent_sales(conn: Connection, zone_code: str) -> Optional[float]:
+    """
+    Approximate max_far for a zone from recent homes' FAR:
+    FAR = living_sq_ft / lot_size_sq_ft, using p90 as a conservative cap.
+    """
+    sql = """
+    WITH addr_one AS (
+        SELECT DISTINCT ON (a.property_id)
+            a.property_id,
+            a.street_id,
+            a.zip_code
+        FROM property_address a
+        ORDER BY a.property_id, a.street_id
+    ),
+    geom_one AS (
+        SELECT DISTINCT ON (pg.property_id)
+            pg.property_id,
+            pg.lot_size_sq_ft
+        FROM property_geometry pg
+        ORDER BY pg.property_id
+    ),
+    zoning_one AS (
+        SELECT DISTINCT ON (pz.property_id)
+            pz.property_id,
+            z.name AS zone_code
+        FROM property_zoning pz
+        JOIN zone z ON z.id = pz.zone_id
+        ORDER BY pz.property_id
+    ),
+    base AS (
+        SELECT
+            h.living_sq_ft::numeric / NULLIF(g.lot_size_sq_ft, 0) AS far
+        FROM mls_history h
+        JOIN addr_one a   ON a.property_id = h.property_id
+        JOIN geom_one g   ON g.property_id = h.property_id
+        JOIN zoning_one z ON z.property_id = h.property_id
+        WHERE
+            z.zone_code = :zone_code
+            AND h.sold_date >= DATE '2020-01-01'
+            AND h.sold_price > 0
+            AND h.living_sq_ft > 0
+            AND g.lot_size_sq_ft > 0
+            AND h.living_sq_ft::numeric / NULLIF(g.lot_size_sq_ft, 0) > 0
+            AND h.living_sq_ft::numeric / NULLIF(g.lot_size_sq_ft, 0) < 5  -- guard against extreme outliers
+    )
+    SELECT
+        PERCENTILE_CONT(0.90) WITHIN GROUP (ORDER BY far) AS p90_far
+    FROM base;
+    """
+    rows = list(_fetch_all(conn, sql, {"zone_code": zone_code}))
+    if not rows:
+        return None
+    v = rows[0].get("p90_far")
+    if v is None:
+        return None
+    try:
+        return float(v)
+    except (TypeError, ValueError):
+        return None
 
 
 def zoning_summary(conn: Connection, p: ZoningSummaryParams) -> List[ZoningSummaryRow]:
@@ -681,13 +1090,18 @@ def zoning_summary(conn: Connection, p: ZoningSummaryParams) -> List[ZoningSumma
     max_height_ft = None
     min_parking_spaces = None
     max_units = None
-    if zone_code and zone_code in _ZONE_LOOKUP:
-        lu = _ZONE_LOOKUP[zone_code]
-        max_far = lu["max_far"]
-        max_height_ft = lu["max_height_ft"]
-        min_parking_spaces = lu["min_parking_spaces"]
-        max_units = lu["max_units"]
-        if lot_sq_ft is not None:
+    if zone_code:
+        if zone_code in _ZONE_LOOKUP:
+            lu = _ZONE_LOOKUP[zone_code]
+            max_far = lu["max_far"]
+            max_height_ft = lu["max_height_ft"]
+            min_parking_spaces = lu["min_parking_spaces"]
+            max_units = lu["max_units"]
+        else:
+            # Fallback: infer max_far from recent homes in this zone
+            inferred_far = _fallback_max_far_from_recent_sales(conn, zone_code)
+            max_far = inferred_far if inferred_far is not None else None
+        if lot_sq_ft is not None and max_far is not None:
             max_gfa = round(lot_sq_ft * max_far, 2)
 
     return [ZoningSummaryRow(
@@ -759,6 +1173,22 @@ def parcel_footprint(conn: Connection, p: ParcelFootprintParams) -> List[ParcelF
     d_val = float(v_d) if v_d is not None and float(v_d) > 0 else (float(i_d) if i_d is not None and float(i_d) > 0 else None)
     width_src = "vendor" if v_w is not None and float(v_w) > 0 else ("inferred" if w_val is not None else None)
     depth_src = "vendor" if v_d is not None and float(v_d) > 0 else ("inferred" if d_val is not None else None)
+    # Infer missing dimension from lot_size_sq_ft when one side is present
+    if lot_sqft is not None and lot_sqft > 0:
+        if w_val is None and d_val is not None and d_val > 0:
+            w_val = lot_sqft / d_val
+            width_src = "inferred"
+        elif d_val is None and w_val is not None and w_val > 0:
+            d_val = lot_sqft / w_val
+            depth_src = "inferred"
+        elif w_val is None and d_val is None:
+            # Both missing: assume square lot so we can still run feasibility
+            from math import sqrt
+            side = sqrt(lot_sqft)
+            w_val = side
+            d_val = side
+            width_src = "inferred"
+            depth_src = "inferred"
     notes_list = []
     if w_val is None:
         notes_list.append("width missing or zero")
@@ -821,6 +1251,249 @@ def property_info(conn: Connection, p: PropertyInfoParams) -> List[PropertyInfoR
         zip_code=str(r["zip_code"]) if r.get("zip_code") else None,
         city_name=str(r["city_name"]) if r.get("city_name") else None,
     )]
+
+
+def _parse_house_number_and_street(address_text: str) -> tuple[Optional[str], Optional[str]]:
+    """
+    Parse "11401 CLOVER AVE" or "11401 CLOVER AVE, LOS ANGELES, CA 90066" into (house_number, street_normalized).
+    Uses only the first comma-separated segment for street matching. Returns (None, None) if no leading house number.
+    """
+    text = (address_text or "").strip()
+    if not text:
+        return (None, None)
+    first_segment = text.split(",")[0].strip()
+    if not first_segment:
+        return (None, None)
+    tokens = first_segment.split()
+    if not tokens:
+        return (None, None)
+    first = tokens[0]
+    if re.match(r"^\d+[A-Za-z]?$", first):
+        house_number = first
+        street_parts = tokens[1:]
+        street_normalized = " ".join(street_parts).strip().upper() if street_parts else None
+        return (house_number, street_normalized)
+    return (None, None)
+
+
+def address_lookup(conn: Connection, p: AddressLookupParams) -> List[AddressLookupRow]:
+    """
+    Resolve address text to up to 5 candidate property_ids.
+    - If address_text is numeric only, treat as property_id (match_score=1.0).
+    - If address_text looks like "11401 CLOVER AVE", parse house_number + street and match in DB.
+    - Otherwise match by optional zip_code and/or city_name; require at least one when not numeric.
+    """
+    text = (p.address_text or "").strip()
+    property_id_param: Optional[int] = None
+    zip_code_param: Optional[str] = p.zip_code.strip() if (p.zip_code and p.zip_code.strip()) else None
+    city_param: Optional[str] = p.city_name.strip() if (p.city_name and p.city_name.strip()) else None
+    house_number_param: Optional[str] = None
+    street_normalized_param: Optional[str] = None
+
+    if text.isdigit():
+        property_id_param = int(text)
+    else:
+        house_number_param, street_normalized_param = _parse_house_number_and_street(text)
+        if house_number_param is None or street_normalized_param is None:
+            if not zip_code_param and not city_param:
+                return []
+            house_number_param = None
+            street_normalized_param = None
+
+    sql = load_sql(_ADDRESS_LOOKUP_SQL)
+    params: Dict[str, Any] = {
+        "property_id": property_id_param,
+        "house_number": house_number_param,
+        "street_normalized": street_normalized_param,
+        "zip_code": zip_code_param,
+        "city_name": city_param,
+    }
+    rows = list(_fetch_all(conn, sql, params))
+    return [
+        AddressLookupRow(
+            property_id=int(r["property_id"]),
+            full_address=str(r["full_address"] or ""),
+            zip_code=str(r["zip_code"]) if r.get("zip_code") is not None else None,
+            city_name=str(r["city_name"]) if r.get("city_name") is not None else None,
+            match_score=float(r["match_score"]),
+        )
+        for r in rows
+    ]
+
+
+def rebuild_eval(conn: Connection, p: RebuildEvalParams) -> RebuildEvalResponse:
+    """
+    Rebuild evaluation: resolve address to property_id, then fetch property_info, parcel_footprint,
+    zoning_summary, comps_aggregate; build feasibility_fit and comps_economics. Returns is_valid=false
+    and notes when address cannot be resolved or geometry/zoning is missing.
+    """
+    lookup_params = AddressLookupParams(
+        address_text=p.address_text,
+        zip_code=p.zip_code,
+        city_name=p.city_name,
+    )
+    candidates = address_lookup(conn, lookup_params)
+    if not candidates:
+        return RebuildEvalResponse(
+            property_id=None,
+            resolved_address=None,
+            is_valid=False,
+            notes="Address could not be resolved. Provide a numeric property_id or zip_code and/or city_name.",
+        )
+    best = candidates[0]
+    property_id = best.property_id
+    resolved_address = best.full_address
+
+    property_info_list = property_info(conn, PropertyInfoParams(property_id=property_id))
+    footprint_list = parcel_footprint(conn, ParcelFootprintParams(property_id=property_id))
+    zoning_list = zoning_summary(conn, ZoningSummaryParams(parcel_id=property_id))
+    comps_params = CompsAggregateParams(
+        subject_parcel_id=property_id,
+        subject_sqft=p.target_living_sq_ft,
+        size_band_pct=p.size_band_pct,
+        recency_months=p.comps_recency_months,
+        city_name=p.city_name or "LOS ANGELES",
+    )
+    comps_list = comps_aggregate(conn, comps_params)
+
+    prop_info = property_info_list[0] if property_info_list else None
+    footprint = footprint_list[0] if footprint_list else None
+    zoning = zoning_list[0] if zoning_list else None
+    comps = comps_list[0] if comps_list else None
+
+    max_gfa = zoning.max_gfa_estimate if zoning else None
+    fits_target = max_gfa is not None and max_gfa >= p.target_living_sq_ft
+    fit_notes_list = []
+    if max_gfa is None and (zoning or footprint):
+        fit_notes_list.append("No max GFA from zoning.")
+    elif max_gfa is not None and not fits_target:
+        fit_notes_list.append(f"Target {p.target_living_sq_ft} sqft exceeds max GFA estimate {max_gfa}.")
+    feasibility_fit = RebuildEvalFeasibilityFit(
+        max_gfa_estimate=max_gfa,
+        fits_target_sq_ft=fits_target,
+        fit_notes="; ".join(fit_notes_list) if fit_notes_list else None,
+    )
+
+    # Buildable footprint from lot dimensions and zone setbacks
+    build_w, build_d, build_sq, build_notes = _buildable_footprint_from_zoning(
+        footprint.lot_width_ft if footprint else None,
+        footprint.lot_depth_ft if footprint else None,
+        zoning.zone_code if zoning else None,
+    )
+    buildable_footprint = RebuildEvalBuildableFootprint(
+        buildable_width_ft=build_w,
+        buildable_depth_ft=build_d,
+        buildable_sq_ft=build_sq,
+        notes=build_notes,
+    ) if (build_w is not None or build_d is not None or build_sq is not None or build_notes) else None
+
+    # Resale comps (comps_aggregate) for baseline PPSF and diagnostics
+    p25 = comps.p25_ppsf if comps else None
+    p50 = comps.median_ppsf if comps else None
+    p75 = comps.p75_ppsf if comps else None
+    t = p.target_living_sq_ft
+
+    # New-build benchmark pricing (year_built >= min_year_built; negative signal when none)
+    newbuild_p25 = None
+    newbuild_p50 = None
+    newbuild_p75 = None
+    newbuild_comp_count = 0
+    has_newbuild = False
+    if prop_info and prop_info.zip_code:
+        try:
+            from src.query_service.schemas import NewBuildBenchmarkParams  # local import to avoid circulars at module import time
+            from src.query_service import queries as _q_self  # type: ignore
+            nb_params = NewBuildBenchmarkParams(
+                min_sold_date=f"{max(p.min_year_built or 2020, 2020)}-01-01",
+                min_year_built=p.min_year_built or 2020,
+                city_name=prop_info.city_name or (p.city_name or "LOS ANGELES"),
+                zip_code=str(prop_info.zip_code).strip(),
+            )
+            nb_rows = _q_self.new_build_benchmark(conn, nb_params)
+            if nb_rows:
+                # Use the most recent year with data
+                row = sorted(nb_rows, key=lambda r: r.sale_year, reverse=True)[0]
+                newbuild_p25 = row.p25_ppsf
+                newbuild_p50 = row.median_ppsf
+                newbuild_p75 = row.p75_ppsf
+                newbuild_comp_count = int(row.sale_count or 0)
+                has_newbuild = newbuild_comp_count > 0 and (newbuild_p50 is not None)
+        except Exception:
+            # Fail-soft: keep new-build fields empty; do not break rebuild_eval.
+            has_newbuild = False
+
+    # Existing value (latest sale price from MLS) and build cost for economics
+    existing_value = float(prop_info.sold_price) if prop_info and prop_info.sold_price is not None else None
+    existing_value_source = "mls" if existing_value is not None else None
+    build_cost = p.build_cost_per_sq_ft * t if p.build_cost_per_sq_ft and t else None
+
+    newbuild_price_low = round(newbuild_p25 * t, 2) if (newbuild_p25 is not None) else None
+    newbuild_price_base = round(newbuild_p50 * t, 2) if (newbuild_p50 is not None) else None
+    newbuild_price_high = round(newbuild_p75 * t, 2) if (newbuild_p75 is not None) else None
+
+    value_accretion = None
+    if existing_value is not None and newbuild_price_base is not None:
+        value_accretion = newbuild_price_base - existing_value
+
+    value_created_vs_build_cost = None
+    margin_ratio = None
+    if newbuild_price_base is not None and build_cost is not None:
+        value_created_vs_build_cost = newbuild_price_base - build_cost
+        if build_cost > 0:
+            margin_ratio = value_created_vs_build_cost / build_cost
+
+    comps_economics = RebuildEvalCompsEconomics(
+        p25_ppsf=p25,
+        p50_ppsf=p50,
+        p75_ppsf=p75,
+        price_low=round(p25 * t, 2) if p25 is not None else None,
+        price_base=round(p50 * t, 2) if p50 is not None else None,
+        price_high=round(p75 * t, 2) if p75 is not None else None,
+        comp_count=comps.comp_count if comps else 0,
+        confidence_band=comps.confidence_band if comps else None,
+        confidence_score=comps.confidence_score if comps else None,
+        median_dist_miles=comps.median_dist_miles if comps else None,
+        median_months_ago=comps.median_months_ago if comps else None,
+        hint=comps.hint if comps else None,
+        newbuild_p25_ppsf=newbuild_p25,
+        newbuild_p50_ppsf=newbuild_p50,
+        newbuild_p75_ppsf=newbuild_p75,
+        newbuild_price_low=newbuild_price_low,
+        newbuild_price_base=newbuild_price_base,
+        newbuild_price_high=newbuild_price_high,
+        newbuild_comp_count=newbuild_comp_count,
+        has_newbuild_comps=has_newbuild,
+        existing_value=existing_value,
+        existing_value_source=existing_value_source,
+        newbuild_value_base=newbuild_price_base,
+        value_accretion=value_accretion,
+        build_cost=build_cost,
+        value_created_vs_build_cost=value_created_vs_build_cost,
+        margin_ratio=margin_ratio,
+    )
+
+    has_geometry = footprint is not None and getattr(footprint, "is_valid_dimensions", False)
+    has_zoning = zoning is not None and (zoning.max_gfa_estimate is not None or ((zoning.zone_code or "").strip() != ""))
+    is_valid = has_geometry or has_zoning
+    notes_list = []
+    if not has_geometry and not has_zoning:
+        notes_list.append("Missing parcel geometry or zoning data.")
+    notes = " ".join(notes_list) if notes_list else None
+
+    return RebuildEvalResponse(
+        property_id=property_id,
+        resolved_address=resolved_address,
+        is_valid=is_valid,
+        notes=notes,
+        property_info=prop_info,
+        parcel_footprint=footprint,
+        zoning_summary=zoning,
+        buildable_footprint=buildable_footprint,
+        feasibility_fit=feasibility_fit,
+        comps_economics=comps_economics,
+        f3_offer_range=None,
+        f4_overpay_risk=None,
+    )
 
 
 def nearby_zoning(conn: Connection, p: NearbyZoningParams) -> List[NearbyZoningRow]:
@@ -919,22 +1592,14 @@ def ppsf_map(conn: Connection, p: PpsfMapParams) -> List[PpsfMapRow]:
         """
         params = {"sale_year": p.sale_year, "limit": p.limit}
     else:
-        sql = """
-        SELECT
-            agg.cell_id::text AS geo_id,
-            g.centroid_lon,
-            g.centroid_lat,
-            agg.median_ppsf,
-            agg.avg_ppsf,
-            agg.comp_count,
-            agg.confidence_band
-        FROM analytics.mv_agg_grid_year_ppsf_025 agg
-        JOIN analytics.grid_cells_025 g ON g.cell_id = agg.cell_id
-        WHERE agg.sale_year = :sale_year
-        ORDER BY agg.comp_count DESC
-        LIMIT :limit
-        """
-        params = {"sale_year": p.sale_year, "limit": p.limit}
+        # Read-only grid: public tables only (mls_history, property_address, street, city, property_geometry).
+        sql = load_sql(_PPSF_MAP_GRID_READONLY_SQL)
+        params = {"sale_year": p.sale_year, "limit": p.limit, "city_name": _norm_city(p.city_name)}
+        try:
+            return [PpsfMapRow(**r) for r in _fetch_all(conn, sql, params)]
+        except ProgrammingError:
+            # e.g. property_geometry or other public table missing
+            return []
     return [PpsfMapRow(**r) for r in _fetch_all(conn, sql, params)]
 
 
@@ -1144,4 +1809,88 @@ def confidence_coverage(conn: Connection, p: ConfidenceCoverageParams) -> List[C
             message=msg,
         )]
     return []
+
+
+def new_build_benchmark(conn: Connection, p: NewBuildBenchmarkParams) -> List[NewBuildBenchmarkRow]:
+    """
+    New-build benchmark: p25/p50/p75 PPSF and DOM by area (ZIP × year) for sales with year_built >= min_year_built.
+    """
+    sql = load_sql(_NEW_BUILD_BENCHMARK_SQL)
+    params = {
+        "min_sold_date": p.min_sold_date,
+        "min_year_built": p.min_year_built,
+        "city_name": _norm_city(p.city_name),
+        "zip_code": _opt_str(p.zip_code),
+    }
+    rows = list(_fetch_all(conn, sql, params))
+    return [NewBuildBenchmarkRow(**r) for r in rows]
+
+
+def region_lot_sizes(conn: Connection, p: RegionLotSizesParams) -> List[RegionLotSizesRow]:
+    """
+    Lot sizes for parcels in a region (ZIP and/or city). For heatmap of lot size distribution.
+    """
+    sql = load_sql(_REGION_LOT_SIZES_SQL)
+    params: Dict[str, Any] = {
+        "city_name": _norm_city(p.city_name),
+        "zip_code": _opt_str(p.zip_code),
+        "min_year_built": p.min_year_built,
+        "max_year_built": p.max_year_built,
+        "limit": p.limit,
+    }
+    rows = list(_fetch_all(conn, sql, params))
+    return [RegionLotSizesRow(lot_size_sq_ft=float(r["lot_size_sq_ft"])) for r in rows]
+
+
+def region_home_sizes(conn: Connection, p: RegionHomeSizesParams) -> List[RegionHomeSizesRow]:
+    """
+    Home sizes (living_sq_ft) for parcels in a region. One row per parcel (like region_lot_sizes).
+    """
+    sql = load_sql(_REGION_HOME_SIZES_SQL)
+    city_param = (p.city_name or "").strip()
+    params = {
+        "zip_code": str(p.zip_code).strip(),
+        "city_name": "" if not city_param else _norm_city(p.city_name),
+        "min_year_built": p.min_year_built,
+        "max_year_built": p.max_year_built,
+        "limit": p.limit,
+    }
+    rows = list(_fetch_all(conn, sql, params))
+    out: List[RegionHomeSizesRow] = []
+    for r in rows:
+        lsft = r.get("living_sq_ft")
+        if lsft is None:
+            continue
+        try:
+            out.append(RegionHomeSizesRow(living_sq_ft=float(lsft)))
+        except (TypeError, ValueError):
+            continue
+    return out
+
+
+def region_home_lot_sizes(conn: Connection, p: RegionHomeLotSizesParams) -> List[RegionHomeLotSizesRow]:
+    """
+    Home size × lot size for parcels in a region. One row per parcel (like home and lot size heat maps). For 2D heatmap.
+    """
+    sql = load_sql(_REGION_HOME_LOT_SIZES_SQL)
+    city_param = (p.city_name or "").strip()
+    params = {
+        "zip_code": str(p.zip_code).strip(),
+        "city_name": "" if not city_param else _norm_city(p.city_name),
+        "min_year_built": p.min_year_built,
+        "max_year_built": p.max_year_built,
+        "limit": p.limit,
+    }
+    rows = list(_fetch_all(conn, sql, params))
+    out: List[RegionHomeLotSizesRow] = []
+    for r in rows:
+        lsft = r.get("living_sq_ft")
+        lotsft = r.get("lot_size_sq_ft")
+        if lsft is None or lotsft is None:
+            continue
+        try:
+            out.append(RegionHomeLotSizesRow(living_sq_ft=float(lsft), lot_size_sq_ft=float(lotsft)))
+        except (TypeError, ValueError):
+            continue
+    return out
 

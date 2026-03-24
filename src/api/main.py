@@ -15,6 +15,8 @@ load_dotenv(_PROJECT_ROOT / ".env")
 
 from src.api.query_router import router as query_router
 from src.api.analytics_router import router as analytics_router
+from src.api.decisions_router import router as decisions_router
+from src.api.attom_router import router as attom_router
 
 
 logger = logging.getLogger("la_api")
@@ -58,6 +60,8 @@ def create_app() -> FastAPI:
 
     app.include_router(query_router)
     app.include_router(analytics_router)
+    app.include_router(decisions_router)
+    app.include_router(attom_router)
 
     # Web visualizations (comps, ZIP/city/year, map)
     web_dir = _PROJECT_ROOT / "web"
