@@ -26,6 +26,8 @@ wheels/
 # Environment and secrets
 .env
 .env.local
+.env.fly
+.env.production
 .env.*.local
 *.pem
 secrets/

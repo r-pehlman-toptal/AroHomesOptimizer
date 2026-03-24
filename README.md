@@ -27,6 +27,9 @@ sql/
 
 tests/             # Row‑count + duplication checks, basic data quality
 requirements.txt   # Core Python dependencies
+docs/DEPLOY.md     # Docker + Fly.io deployment (.env, secrets)
+Dockerfile         # Container image for Fly / docker run
+fly.toml           # Fly.io app config
 ```
 
 
